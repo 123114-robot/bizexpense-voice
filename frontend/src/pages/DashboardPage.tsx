@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { expenseService } from '../services/expenseService'
 import type { Dashboard } from '../types/expense'
+import { VoiceAssistant } from '../voice/VoiceAssistant'
 
 export function DashboardPage() {
   const [data, setData] = useState<Dashboard>()
-  useEffect(() => { expenseService.dashboard().then(setData) }, [])
+  const loadDashboard = useCallback(() => { void expenseService.dashboard().then(setData) }, [])
+  useEffect(loadDashboard, [loadDashboard])
 
   const cards = [
     ['Total expenses', data?.total_expenses],
@@ -18,6 +20,7 @@ export function DashboardPage() {
   return <>
     <h1 className="mb-1 text-3xl font-bold">Dashboard</h1>
     <p className="mb-6 text-slate-600">A clear view of your confirmed business spending.</p>
+    <VoiceAssistant onMutation={loadDashboard} />
     <div className="grid gap-4 md:grid-cols-4">
       {cards.map(([label, value]) => <div className="card" key={label}>
         <p className="text-sm text-slate-500">{label}</p>
