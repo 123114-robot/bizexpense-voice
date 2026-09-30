@@ -1,4 +1,14 @@
-# BizExpense
+# BizExpense Voice
+
+BizExpense Voice is an AssemblyAI Voice Agent Hackathon extension of the existing BizExpense expense-management MVP.
+
+It preserves the original expense-management architecture and adds a voice-first interaction layer powered by AssemblyAI.
+
+Original project:
+https://github.com/123114-robot/bizexpense
+
+Hackathon extension:
+https://github.com/123114-robot/bizexpense-voice
 
 BizExpense is a portfolio-quality MVP for Australian SMEs to record expenses, upload invoices, review mock OCR results and see live spending totals. It deliberately keeps authentication, production OCR and accounting integrations out of scope.
 
