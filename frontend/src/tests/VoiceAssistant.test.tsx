@@ -28,6 +28,28 @@ test('VoiceAssistant renders', () => {
 
   expect(screen.getByRole('heading', { name: 'BizExpense Voice' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Start voice assistant' })).toBeInTheDocument()
+  expect(screen.getByText('Prototype demo — mock voice input')).toBeInTheDocument()
+})
+
+test('mock query uses the BizExpense voice tool adapter', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      total_expenses: '120.00',
+      expenses_this_month: '38.50',
+      gst_paid: '0.00',
+      category_breakdown: [],
+    }),
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  render(<VoiceAssistant onMutation={vi.fn()} />)
+
+  await userEvent.click(screen.getByRole('button', { name: 'Demo query' }))
+
+  expect(await screen.findByText('Mock voice mode')).toBeInTheDocument()
+  expect(screen.getByText(/How much did I spend this month/)).toBeInTheDocument()
+  expect(screen.getByText(/\$38.50 in confirmed expenses this month/)).toBeInTheDocument()
+  expect(fetchMock).toHaveBeenCalledWith('/api/voice/tools/summary', expect.objectContaining({ method: 'POST' }))
 })
 
 test('confirmation button executes a pending action once', async () => {

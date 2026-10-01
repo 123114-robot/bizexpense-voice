@@ -17,6 +17,8 @@ From the existing dashboard, start the microphone and try:
 - “How much did I spend this month?” The agent reads live `DashboardService` data.
 - “Change my last expense to office supplies.” Review the category-only change, then confirm it.
 
+Without AssemblyAI credentials, use the clearly labelled **Prototype demo — mock voice input** buttons. They simulate transcript, intent, and tool selection only; confirmed actions still call the configured BizExpense API. Mock mode is not evidence of a live AssemblyAI integration.
+
 Writes are always prepared first. Nothing reaches the database until the user clicks **Confirm**, and repeated confirmation cannot execute the same action twice.
 
 ## Architecture

@@ -1,11 +1,8 @@
 export type VoiceStatus = 'idle' | 'connecting' | 'ready' | 'listening' | 'processing' | 'confirmation_required' | 'success' | 'error'
 
-export type PendingVoiceAction = {
-  status: 'confirmation_required'
-  pending_action_id: string
-  action: 'create_expense' | 'update_expense'
-  preview: Record<string, string | number>
-}
+import { type PendingVoiceAction, voiceToolAdapter } from './voiceToolAdapter'
+
+export type { PendingVoiceAction } from './voiceToolAdapter'
 
 type VoiceAgentOptions = {
   onStatus: (status: VoiceStatus) => void
@@ -23,12 +20,6 @@ type ToolCall = {
 }
 
 type ToolResult = { callId: string; result: unknown }
-
-const TOOL_ENDPOINTS: Record<string, string> = {
-  prepare_expense: '/api/voice/tools/prepare-expense',
-  get_expense_summary: '/api/voice/tools/summary',
-  prepare_expense_update: '/api/voice/tools/prepare-update',
-}
 
 function messageFromUnknown(error: unknown) {
   return error instanceof Error ? error.message : 'Voice assistant failed'
@@ -162,26 +153,15 @@ export class VoiceAgentClient {
   }
 
   private async runTool(call: ToolCall) {
-    const endpoint = TOOL_ENDPOINTS[call.name]
     let result: unknown
-    if (!endpoint) {
-      result = { error: `Unknown tool: ${call.name}` }
-    } else {
-      try {
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(call.arguments),
-        })
-        const body = await response.json()
-        result = response.ok ? body : { error: body.detail || 'BizExpense tool failed' }
-        if (response.ok && body.status === 'confirmation_required') {
-          this.options.onPendingAction(body as PendingVoiceAction)
-          this.options.onStatus('confirmation_required')
-        }
-      } catch (error) {
-        result = { error: messageFromUnknown(error) }
+    try {
+      result = await voiceToolAdapter.callTool(call.name, call.arguments)
+      if ((result as PendingVoiceAction).status === 'confirmation_required') {
+        this.options.onPendingAction(result as PendingVoiceAction)
+        this.options.onStatus('confirmation_required')
       }
+    } catch (error) {
+      result = { error: messageFromUnknown(error) }
     }
     this.pendingToolResults.push({ callId: call.call_id, result })
   }
@@ -220,4 +200,3 @@ export class VoiceAgentClient {
     this.playbackTime = this.audioContext?.currentTime || 0
   }
 }
-

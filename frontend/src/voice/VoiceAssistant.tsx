@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { VoiceAgentClient, type PendingVoiceAction, type VoiceStatus } from './voiceAgentClient'
+import { type VoiceSummary, voiceToolAdapter } from './voiceToolAdapter'
 
 type Props = { onMutation: () => void }
 
@@ -24,10 +25,12 @@ export function VoiceAssistant({ onMutation }: Props) {
   const [agentTranscript, setAgentTranscript] = useState('')
   const [pending, setPending] = useState<PendingVoiceAction>()
   const [error, setError] = useState('')
+  const [mockMode, setMockMode] = useState(false)
 
   useEffect(() => () => client.current?.disconnect(), [])
 
   const start = async () => {
+    setMockMode(false)
     setError('')
     client.current?.disconnect()
     const next = new VoiceAgentClient({
@@ -46,15 +49,48 @@ export function VoiceAssistant({ onMutation }: Props) {
     }
   }
 
+  const runPrototype = async (action: 'create' | 'summary' | 'update') => {
+    setMockMode(true)
+    setError('')
+    setPending(undefined)
+    setStatus('processing')
+    const examples = {
+      create: 'I spent $38.50 at Woolworths today.',
+      summary: 'How much did I spend this month?',
+      update: 'Change my last expense to office supplies.',
+    }
+    setUserTranscript(examples[action])
+    try {
+      if (action === 'summary') {
+        const summary = await voiceToolAdapter.callTool('get_expense_summary', {}) as VoiceSummary
+        setAgentTranscript(`You have recorded $${summary.expenses_this_month} in confirmed expenses this month.`)
+        setStatus('success')
+        return
+      }
+      const result = await voiceToolAdapter.callTool(
+        action === 'create' ? 'prepare_expense' : 'prepare_expense_update',
+        action === 'create'
+          ? { supplier_name: 'Woolworths', amount: 38.5, invoice_date: 'today' }
+          : { category_name: 'Office Supplies' },
+      ) as PendingVoiceAction
+      setPending(result)
+      setAgentTranscript(action === 'create'
+        ? 'I found $38.50 at Woolworths for today. Please confirm.'
+        : 'I prepared the category change. Please confirm.')
+      setStatus('confirmation_required')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Prototype action failed')
+      setStatus('error')
+    }
+  }
+
   const confirm = async () => {
     if (!pending || executing.current) return
     executing.current = true
     setStatus('executing')
     setError('')
     try {
-      const response = await fetch(`/api/voice/actions/${pending.pending_action_id}/confirm`, { method: 'POST' })
-      const body = await response.json().catch(() => ({})) as { detail?: string }
-      if (!response.ok) throw new Error(body.detail || 'Unable to save expense')
+      await voiceToolAdapter.confirm(pending.pending_action_id)
       setPending(undefined)
       setStatus('success')
       setAgentTranscript('Expense saved. Your dashboard is up to date.')
@@ -69,7 +105,7 @@ export function VoiceAssistant({ onMutation }: Props) {
 
   const cancel = async () => {
     if (!pending) return
-    await fetch(`/api/voice/actions/${pending.pending_action_id}`, { method: 'DELETE' })
+    await voiceToolAdapter.cancel(pending.pending_action_id)
     setPending(undefined)
     setStatus('ready')
     setAgentTranscript('Cancelled. Nothing was saved.')
@@ -87,6 +123,16 @@ export function VoiceAssistant({ onMutation }: Props) {
       </button>
     </div>
     <p className="mt-4 text-sm"><strong>Status:</strong> {statusLabels[status]}</p>
+    <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
+      <p className="text-sm font-semibold text-blue-950">Prototype demo — mock voice input</p>
+      <p className="mt-1 text-xs text-blue-800">Transcript, intent, and tool selection are simulated. Confirmed actions still call the configured BizExpense API.</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button className="btn-secondary" onClick={() => runPrototype('create')}>Demo create</button>
+        <button className="btn-secondary" onClick={() => runPrototype('summary')}>Demo query</button>
+        <button className="btn-secondary" onClick={() => runPrototype('update')}>Demo category update</button>
+      </div>
+    </div>
+    {mockMode && <p className="mt-3 text-xs font-semibold uppercase text-blue-700">Mock voice mode</p>}
     {userTranscript && <p className="mt-3 rounded-lg bg-slate-50 p-3"><strong>You:</strong> “{userTranscript}”</p>}
     {agentTranscript && <p className="mt-3 rounded-lg bg-teal-50 p-3 text-teal-950"><strong>Agent:</strong> “{agentTranscript}”</p>}
     {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-red-800">{error}</p>}
