@@ -57,7 +57,7 @@ $env:ASSEMBLYAI_API_KEY = "your-key"
 python scripts/create_voice_agent.py
 ```
 
-Save the printed ID as `ASSEMBLYAI_AGENT_ID`. The agent exposes four function tools: `prepare_expense`, `get_expense_summary`, `search_expenses`, and `prepare_expense_update`.
+Save the printed ID as `ASSEMBLYAI_AGENT_ID`. The agent exposes five function tools: `prepare_expense`, `get_expense_summary`, `search_expenses`, `list_expense_categories`, and `prepare_expense_update`.
 
 The synchronized BizExpense foundation also includes:
 

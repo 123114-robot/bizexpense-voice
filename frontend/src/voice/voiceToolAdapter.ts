@@ -26,9 +26,12 @@ export type VoiceSearchResult = {
   }[]
 }
 
+export type VoiceCategories = { categories: string[] }
+
 const endpoints: Record<string, string> = {
   prepare_expense: '/voice/tools/prepare-expense',
   get_expense_summary: '/voice/tools/summary',
+  list_expense_categories: '/voice/tools/categories',
   search_expenses: '/voice/tools/search-expenses',
   prepare_expense_update: '/voice/tools/prepare-update',
 }
@@ -41,7 +44,7 @@ export const voiceToolAdapter = {
   async callTool(name: string, args: Record<string, unknown>) {
     const endpoint = endpoints[name]
     if (!endpoint) throw new Error(`Unknown voice tool: ${name}`)
-    return jsonRequest<PendingVoiceAction | VoiceSummary | VoiceSearchResult>(endpoint, {
+    return jsonRequest<PendingVoiceAction | VoiceSummary | VoiceSearchResult | VoiceCategories>(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(args),

@@ -132,6 +132,12 @@ class VoiceService:
     def summary(self) -> dict:
         return DashboardService(self.db, self.user.id).summary()
 
+    def categories(self) -> dict:
+        names = self.db.scalars(
+            select(ExpenseCategory.name).order_by(ExpenseCategory.id)
+        ).all()
+        return {"categories": list(names)}
+
     def search_expenses(self, request: SearchExpensesRequest) -> dict:
         category_id = (
             self._category(request.category_name).id

@@ -75,6 +75,23 @@ test('mock search queries confirmed expenses by supplier', async () => {
   )
 })
 
+test('mock categories reads the available BizExpense categories', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ categories: ['Office Supplies', 'Fuel', 'Travel'] }),
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  render(<VoiceAssistant onMutation={vi.fn()} />)
+
+  await userEvent.click(screen.getByRole('button', { name: 'Demo categories' }))
+
+  expect(await screen.findByText(/available categories are Office Supplies, Fuel, and Travel/i)).toBeInTheDocument()
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/voice/tools/categories',
+    expect.objectContaining({ method: 'POST' }),
+  )
+})
+
 test('mock category update targets the spoken supplier', async () => {
   const fetchMock = vi.fn().mockResolvedValue({
     ok: true,

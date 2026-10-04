@@ -99,6 +99,26 @@ def test_voice_summary(auth_client, db):
     assert response.json()["gst_paid"] == "10.00"
 
 
+def test_voice_lists_existing_categories(auth_client):
+    response = auth_client.post("/api/voice/tools/categories", json={})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "categories": [
+            "Office Supplies",
+            "Fuel",
+            "Travel",
+            "Software",
+            "Utilities",
+            "Meals",
+            "Equipment",
+            "Professional Services",
+            "Marketing",
+            "Other",
+        ]
+    }
+
+
 def test_voice_search_expenses_by_supplier_and_category(auth_client, db):
     create_expense(db, supplier_name="Woolworths", category_id=1, total="38.50")
     create_expense(db, supplier_name="Caltex", category_id=2, total="72.00")

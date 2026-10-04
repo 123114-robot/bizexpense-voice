@@ -50,6 +50,13 @@ def voice_summary(
     return service(db, user).summary()
 
 
+@router.post("/tools/categories")
+def voice_categories(
+    db: Session = Depends(get_db), user: User = Depends(current_user)
+):
+    return service(db, user).categories()
+
+
 @router.post("/tools/search-expenses")
 def search_expenses(
     payload: SearchExpensesRequest,

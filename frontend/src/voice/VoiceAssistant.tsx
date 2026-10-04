@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { VoiceAgentClient, type PendingVoiceAction, type VoiceStatus } from './voiceAgentClient'
-import { type VoiceSearchResult, type VoiceSummary, voiceToolAdapter } from './voiceToolAdapter'
+import { type VoiceCategories, type VoiceSearchResult, type VoiceSummary, voiceToolAdapter } from './voiceToolAdapter'
 
 type Props = { onMutation: () => void }
 
@@ -50,7 +50,7 @@ export function VoiceAssistant({ onMutation }: Props) {
     }
   }
 
-  const runPrototype = async (action: 'create' | 'summary' | 'search' | 'update') => {
+  const runPrototype = async (action: 'create' | 'summary' | 'search' | 'categories' | 'update') => {
     client.current?.disconnect()
     setMockMode(true)
     setError('')
@@ -60,6 +60,7 @@ export function VoiceAssistant({ onMutation }: Props) {
       create: 'I spent $38.50 at Woolworths today.',
       summary: 'How much did I spend this month?',
       search: 'Show my Woolworths expenses.',
+      categories: 'What expense categories can I use?',
       update: 'Classify my Woolworths expense as office supplies.',
     }
     setUserTranscript(examples[action])
@@ -79,6 +80,17 @@ export function VoiceAssistant({ onMutation }: Props) {
         setAgentTranscript(first
           ? `I found ${first.supplier_name} expense for $${first.total_amount} on ${first.invoice_date}.`
           : 'I found no confirmed Woolworths expenses.')
+        setStatus('success')
+        return
+      }
+      if (action === 'categories') {
+        const result = await voiceToolAdapter.callTool(
+          'list_expense_categories',
+          {},
+        ) as VoiceCategories
+        const last = result.categories.at(-1)
+        const leading = result.categories.slice(0, -1).join(', ')
+        setAgentTranscript(`Available categories are ${leading}${leading ? ', and ' : ''}${last ?? 'none'}.`)
         setStatus('success')
         return
       }
@@ -151,6 +163,7 @@ export function VoiceAssistant({ onMutation }: Props) {
         <button className="btn-secondary" onClick={() => runPrototype('create')}>Demo create</button>
         <button className="btn-secondary" onClick={() => runPrototype('summary')}>Demo query</button>
         <button className="btn-secondary" onClick={() => runPrototype('search')}>Demo search</button>
+        <button className="btn-secondary" onClick={() => runPrototype('categories')}>Demo categories</button>
         <button className="btn-secondary" onClick={() => runPrototype('update')}>Demo category update</button>
       </div>
     </div>
