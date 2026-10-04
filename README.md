@@ -42,6 +42,7 @@ The voice layer does not replace the existing REST API, schemas, expense CRUD, d
 
 - Prepare an AUD expense from supplier, amount, and date; an omitted category safely uses the existing `Other` category.
 - Read confirmed total, current-month, GST, and category summary data.
+- Search up to five recent confirmed expenses by supplier, description, or category.
 - Prepare a category-only change to the latest confirmed expense while preserving every other required field.
 - Resolve `today`, `yesterday`, and ISO `YYYY-MM-DD` dates server-side.
 
@@ -56,7 +57,7 @@ $env:ASSEMBLYAI_API_KEY = "your-key"
 python scripts/create_voice_agent.py
 ```
 
-Save the printed ID as `ASSEMBLYAI_AGENT_ID`. The agent exposes only three function tools: `prepare_expense`, `get_expense_summary`, and `prepare_expense_update`.
+Save the printed ID as `ASSEMBLYAI_AGENT_ID`. The agent exposes four function tools: `prepare_expense`, `get_expense_summary`, `search_expenses`, and `prepare_expense_update`.
 
 The synchronized BizExpense foundation also includes:
 

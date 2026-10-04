@@ -18,11 +18,13 @@ def clear_pending_actions():
     pending_actions.clear()
 
 
-def create_expense(db, *, category_id=1, total="110.00", confirmed=True):
+def create_expense(
+    db, *, supplier_name="Acme", category_id=1, total="110.00", confirmed=True
+):
     user = db.scalar(select(User).where(User.email == "owner@example.com"))
     return ExpenseService(db, user).create(
         ExpenseCreate(
-            supplier_name="Acme",
+            supplier_name=supplier_name,
             category_id=category_id,
             invoice_date=date(2026, 9, 30),
             subtotal=Decimal(total),
@@ -89,6 +91,33 @@ def test_voice_summary(auth_client, db):
     assert response.status_code == 200
     assert response.json()["total_expenses"] == "110.00"
     assert response.json()["gst_paid"] == "10.00"
+
+
+def test_voice_search_expenses_by_supplier_and_category(auth_client, db):
+    create_expense(db, supplier_name="Woolworths", category_id=1, total="38.50")
+    create_expense(db, supplier_name="Caltex", category_id=2, total="72.00")
+
+    supplier_result = auth_client.post(
+        "/api/voice/tools/search-expenses", json={"search": "Woolworths"}
+    ).json()
+    category_result = auth_client.post(
+        "/api/voice/tools/search-expenses", json={"category_name": "Fuel"}
+    ).json()
+
+    assert supplier_result["count"] == 1
+    assert supplier_result["expenses"][0]["supplier_name"] == "Woolworths"
+    assert supplier_result["expenses"][0]["total_amount"] == "38.50"
+    assert category_result["count"] == 1
+    assert category_result["expenses"][0]["supplier_name"] == "Caltex"
+
+
+def test_voice_search_rejects_unknown_category(auth_client):
+    response = auth_client.post(
+        "/api/voice/tools/search-expenses", json={"category_name": "Imaginary"}
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Unknown category: Imaginary"
 
 
 def test_prepare_expense(auth_client):

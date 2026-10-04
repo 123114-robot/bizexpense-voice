@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 from app.api.auth import current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.voice import PrepareExpenseRequest, PrepareExpenseUpdateRequest
+from app.schemas.voice import (
+    PrepareExpenseRequest,
+    PrepareExpenseUpdateRequest,
+    SearchExpensesRequest,
+)
 from app.services.voice_service import PendingActionStore, VoiceService
 
 router = APIRouter(prefix="/voice", tags=["voice"])
@@ -44,6 +48,15 @@ def voice_summary(
     db: Session = Depends(get_db), user: User = Depends(current_user)
 ):
     return service(db, user).summary()
+
+
+@router.post("/tools/search-expenses")
+def search_expenses(
+    payload: SearchExpensesRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    return service(db, user).search_expenses(payload)
 
 
 @router.post("/tools/prepare-expense")

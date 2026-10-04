@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { VoiceAgentClient, type PendingVoiceAction, type VoiceStatus } from './voiceAgentClient'
-import { type VoiceSummary, voiceToolAdapter } from './voiceToolAdapter'
+import { type VoiceSearchResult, type VoiceSummary, voiceToolAdapter } from './voiceToolAdapter'
 
 type Props = { onMutation: () => void }
 
@@ -50,7 +50,7 @@ export function VoiceAssistant({ onMutation }: Props) {
     }
   }
 
-  const runPrototype = async (action: 'create' | 'summary' | 'update') => {
+  const runPrototype = async (action: 'create' | 'summary' | 'search' | 'update') => {
     client.current?.disconnect()
     setMockMode(true)
     setError('')
@@ -59,6 +59,7 @@ export function VoiceAssistant({ onMutation }: Props) {
     const examples = {
       create: 'I spent $38.50 at Woolworths today.',
       summary: 'How much did I spend this month?',
+      search: 'Show my Woolworths expenses.',
       update: 'Change my last expense to office supplies.',
     }
     setUserTranscript(examples[action])
@@ -66,6 +67,18 @@ export function VoiceAssistant({ onMutation }: Props) {
       if (action === 'summary') {
         const summary = await voiceToolAdapter.callTool('get_expense_summary', {}) as VoiceSummary
         setAgentTranscript(`You have recorded $${summary.expenses_this_month} in confirmed expenses this month.`)
+        setStatus('success')
+        return
+      }
+      if (action === 'search') {
+        const result = await voiceToolAdapter.callTool(
+          'search_expenses',
+          { search: 'Woolworths' },
+        ) as VoiceSearchResult
+        const first = result.expenses[0]
+        setAgentTranscript(first
+          ? `I found ${first.supplier_name} expense for $${first.total_amount} on ${first.invoice_date}.`
+          : 'I found no confirmed Woolworths expenses.')
         setStatus('success')
         return
       }
@@ -137,6 +150,7 @@ export function VoiceAssistant({ onMutation }: Props) {
       <div className="mt-3 flex flex-wrap gap-2">
         <button className="btn-secondary" onClick={() => runPrototype('create')}>Demo create</button>
         <button className="btn-secondary" onClick={() => runPrototype('summary')}>Demo query</button>
+        <button className="btn-secondary" onClick={() => runPrototype('search')}>Demo search</button>
         <button className="btn-secondary" onClick={() => runPrototype('update')}>Demo category update</button>
       </div>
     </div>

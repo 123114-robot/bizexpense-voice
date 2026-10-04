@@ -55,6 +55,26 @@ test('mock query uses the BizExpense voice tool adapter', async () => {
   expect(fetchMock).toHaveBeenCalledWith('/api/voice/tools/summary', expect.objectContaining({ method: 'POST' }))
 })
 
+test('mock search queries confirmed expenses by supplier', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      count: 1,
+      expenses: [{ supplier_name: 'Woolworths', total_amount: '38.50', invoice_date: '2026-09-30' }],
+    }),
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  render(<VoiceAssistant onMutation={vi.fn()} />)
+
+  await userEvent.click(screen.getByRole('button', { name: 'Demo search' }))
+
+  expect(await screen.findByText(/Woolworths expense for \$38.50/)).toBeInTheDocument()
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/voice/tools/search-expenses',
+    expect.objectContaining({ method: 'POST' }),
+  )
+})
+
 test('confirmation button executes a pending action once', async () => {
   connect.mockImplementation(async () => {
     clientOptions.onStatus('ready')

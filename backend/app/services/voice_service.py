@@ -11,7 +11,11 @@ from sqlalchemy.orm import Session
 from app.models.category import ExpenseCategory
 from app.models.user import User
 from app.schemas.expense import ExpenseCreate
-from app.schemas.voice import PrepareExpenseRequest, PrepareExpenseUpdateRequest
+from app.schemas.voice import (
+    PrepareExpenseRequest,
+    PrepareExpenseUpdateRequest,
+    SearchExpensesRequest,
+)
 from app.services.dashboard_service import DashboardService
 from app.services.expense_service import ExpenseService
 
@@ -127,6 +131,32 @@ class VoiceService:
 
     def summary(self) -> dict:
         return DashboardService(self.db, self.user.id).summary()
+
+    def search_expenses(self, request: SearchExpensesRequest) -> dict:
+        category_id = (
+            self._category(request.category_name).id
+            if request.category_name is not None
+            else None
+        )
+        expenses = ExpenseService(self.db, self.user).list(
+            search=request.search,
+            category_id=category_id,
+            ocr_confirmed=True,
+        )
+        return {
+            "count": len(expenses),
+            "expenses": [
+                {
+                    "id": expense.id,
+                    "supplier_name": expense.supplier_name,
+                    "category_name": expense.category_name,
+                    "invoice_date": expense.invoice_date.isoformat(),
+                    "total_amount": f"{expense.total_amount:.2f}",
+                    "currency": expense.currency,
+                }
+                for expense in expenses[:5]
+            ],
+        }
 
     def prepare_expense(self, request: PrepareExpenseRequest) -> dict:
         category = self._category(request.category_name)
