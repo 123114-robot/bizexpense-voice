@@ -190,9 +190,16 @@ class VoiceService:
 
     def prepare_update(self, request: PrepareExpenseUpdateRequest) -> dict:
         category = self._category(request.category_name)
-        expenses = ExpenseService(self.db, self.user).list(ocr_confirmed=True)
+        expenses = ExpenseService(self.db, self.user).list(
+            search=request.search, ocr_confirmed=True
+        )
         if not expenses:
-            raise HTTPException(404, "No confirmed expense is available to update")
+            detail = (
+                f"No confirmed expense matches: {request.search}"
+                if request.search
+                else "No confirmed expense is available to update"
+            )
+            raise HTTPException(404, detail)
         latest = expenses[0]
         payload = ExpenseCreate(
             supplier_name=latest.supplier_name,

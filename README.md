@@ -50,7 +50,7 @@ The voice layer does not replace the existing REST API, schemas, expense CRUD, d
 
 The backend mints a single-use, 60-second browser token from `GET https://agents.assemblyai.com/v1/token`; the API key never enters the React bundle. The browser then connects to `wss://agents.assemblyai.com/v1/ws` using a stored agent ID.
 
-The stored agent definition is in `assemblyai/agent.json`. Create it once:
+The stored agent definition is in `assemblyai/agent.json`. It supports creating, querying, searching, and classifying matching expenses. Create it once:
 
 ```powershell
 $env:ASSEMBLYAI_API_KEY = "your-key"

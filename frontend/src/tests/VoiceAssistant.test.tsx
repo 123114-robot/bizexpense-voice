@@ -75,6 +75,35 @@ test('mock search queries confirmed expenses by supplier', async () => {
   )
 })
 
+test('mock category update targets the spoken supplier', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      status: 'confirmation_required',
+      pending_action_id: 'pending-category',
+      action: 'update_expense',
+      preview: {
+        supplier_name: 'Woolworths',
+        current_category: 'Other',
+        proposed_category: 'Office Supplies',
+      },
+    }),
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  render(<VoiceAssistant onMutation={vi.fn()} />)
+
+  await userEvent.click(screen.getByRole('button', { name: 'Demo category update' }))
+
+  expect(await screen.findByText(/prepared the Woolworths category change/i)).toBeInTheDocument()
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/voice/tools/prepare-update',
+    expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ category_name: 'Office Supplies', search: 'Woolworths' }),
+    }),
+  )
+})
+
 test('confirmation button executes a pending action once', async () => {
   connect.mockImplementation(async () => {
     clientOptions.onStatus('ready')

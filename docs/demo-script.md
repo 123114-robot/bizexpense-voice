@@ -29,7 +29,7 @@ Show the existing BizExpense dashboard and the voice panel.
 
 ## 1:35–2:05 — Demo C: update
 
-1. Say: “Change my last expense to office supplies.”
+1. Say: “Classify my Woolworths expense as office supplies.”
 2. Show the current and proposed categories.
 3. Click **Confirm**.
 4. Show success and the refreshed category breakdown.

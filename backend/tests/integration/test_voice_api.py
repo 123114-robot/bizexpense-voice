@@ -19,14 +19,20 @@ def clear_pending_actions():
 
 
 def create_expense(
-    db, *, supplier_name="Acme", category_id=1, total="110.00", confirmed=True
+    db,
+    *,
+    supplier_name="Acme",
+    category_id=1,
+    total="110.00",
+    confirmed=True,
+    invoice_date=date(2026, 9, 30),
 ):
     user = db.scalar(select(User).where(User.email == "owner@example.com"))
     return ExpenseService(db, user).create(
         ExpenseCreate(
             supplier_name=supplier_name,
             category_id=category_id,
-            invoice_date=date(2026, 9, 30),
+            invoice_date=invoice_date,
             subtotal=Decimal(total),
             gst_amount=Decimal("10.00"),
             total_amount=Decimal(total),
@@ -275,6 +281,32 @@ def test_prepare_update_latest_expense(auth_client, db):
     assert body["preview"]["expense_id"] == expense.id
     assert body["preview"]["current_category"] == "Fuel"
     assert body["preview"]["proposed_category"] == "Office Supplies"
+
+
+def test_prepare_update_targets_matching_expense(auth_client, db):
+    target = create_expense(
+        db,
+        supplier_name="Woolworths",
+        category_id=3,
+        invoice_date=date(2026, 9, 29),
+    )
+    create_expense(
+        db,
+        supplier_name="Caltex",
+        category_id=2,
+        invoice_date=date(2026, 9, 30),
+    )
+
+    response = auth_client.post(
+        "/api/voice/tools/prepare-update",
+        json={"category_name": "Office Supplies", "search": "Woolworths"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["preview"]["expense_id"] == target.id
+    assert body["preview"]["supplier_name"] == "Woolworths"
+    assert body["preview"]["current_category"] == "Travel"
 
 
 def test_update_preserves_existing_fields(auth_client, db):

@@ -60,7 +60,7 @@ export function VoiceAssistant({ onMutation }: Props) {
       create: 'I spent $38.50 at Woolworths today.',
       summary: 'How much did I spend this month?',
       search: 'Show my Woolworths expenses.',
-      update: 'Change my last expense to office supplies.',
+      update: 'Classify my Woolworths expense as office supplies.',
     }
     setUserTranscript(examples[action])
     try {
@@ -86,12 +86,12 @@ export function VoiceAssistant({ onMutation }: Props) {
         action === 'create' ? 'prepare_expense' : 'prepare_expense_update',
         action === 'create'
           ? { supplier_name: 'Woolworths', amount: 38.5, invoice_date: 'today' }
-          : { category_name: 'Office Supplies' },
+          : { category_name: 'Office Supplies', search: 'Woolworths' },
       ) as PendingVoiceAction
       setPending(result)
       setAgentTranscript(action === 'create'
         ? 'I found $38.50 at Woolworths for today. Please confirm.'
-        : 'I prepared the category change. Please confirm.')
+        : 'I prepared the Woolworths category change. Please confirm.')
       setStatus('confirmation_required')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Prototype action failed')
@@ -159,7 +159,7 @@ export function VoiceAssistant({ onMutation }: Props) {
     {agentTranscript && <p className="mt-3 rounded-lg bg-teal-50 p-3 text-teal-950"><strong>Agent:</strong> “{agentTranscript}”</p>}
     {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-red-800">{error}</p>}
     {pending && preview && <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4">
-      <h3 className="font-semibold">{pending.action === 'create_expense' ? 'New expense' : 'Update latest expense'}</h3>
+      <h3 className="font-semibold">{pending.action === 'create_expense' ? 'New expense' : 'Classify expense'}</h3>
       <dl className="mt-3 grid gap-2 sm:grid-cols-2">
         {Object.entries(preview).filter(([key]) => key !== 'expense_id').map(([key, value]) => <div key={key}>
           <dt className="text-xs uppercase text-slate-500">{key.replaceAll('_', ' ')}</dt>
