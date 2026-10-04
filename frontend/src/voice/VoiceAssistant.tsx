@@ -44,12 +44,14 @@ export function VoiceAssistant({ onMutation }: Props) {
     try {
       await next.connect()
     } catch (caught) {
+      next.disconnect()
       setError(caught instanceof Error ? caught.message : 'Unable to start voice assistant')
       setStatus('error')
     }
   }
 
   const runPrototype = async (action: 'create' | 'summary' | 'update') => {
+    client.current?.disconnect()
     setMockMode(true)
     setError('')
     setPending(undefined)
@@ -105,10 +107,16 @@ export function VoiceAssistant({ onMutation }: Props) {
 
   const cancel = async () => {
     if (!pending) return
-    await voiceToolAdapter.cancel(pending.pending_action_id)
-    setPending(undefined)
-    setStatus('ready')
-    setAgentTranscript('Cancelled. Nothing was saved.')
+    setError('')
+    try {
+      await voiceToolAdapter.cancel(pending.pending_action_id)
+      setPending(undefined)
+      setStatus('ready')
+      setAgentTranscript('Cancelled. Nothing was saved.')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to cancel pending action')
+      setStatus('error')
+    }
   }
 
   const preview = pending?.preview

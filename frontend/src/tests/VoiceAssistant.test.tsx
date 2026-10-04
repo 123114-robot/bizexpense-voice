@@ -18,8 +18,11 @@ vi.mock('../voice/voiceAgentClient', () => ({
   },
 }))
 
-afterEach(() => {
+beforeEach(() => {
   vi.clearAllMocks()
+})
+
+afterEach(() => {
   vi.unstubAllGlobals()
 })
 
@@ -96,4 +99,25 @@ test('error state renders', async () => {
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Microphone permission denied')
   expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  expect(disconnect).toHaveBeenCalledTimes(1)
+})
+
+test('mock demo disconnects a live microphone session', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      total_expenses: '120.00',
+      expenses_this_month: '38.50',
+      gst_paid: '0.00',
+      category_breakdown: [],
+    }),
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  render(<VoiceAssistant onMutation={vi.fn()} />)
+
+  await userEvent.click(screen.getByRole('button', { name: 'Start voice assistant' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Demo query' }))
+
+  expect(disconnect).toHaveBeenCalledTimes(1)
+  expect(await screen.findByText('Mock voice mode')).toBeInTheDocument()
 })
