@@ -14,13 +14,21 @@
 - [x] Database-backed dashboard summary
 - [x] Phase 6: confirmed-expense category breakdown and six-month trend
 - [x] Phase 7: supplier/description, category, date and status filters with matching CSV export
+- [x] Phase 8A: migration baseline, environment configuration, request IDs and security headers
+- [x] Phase 8B: trusted-host enforcement and upload content/extension verification
+- [x] Phase 8C1: registration, password hashing, JWT login and current-user API
 - [x] Backend unit/integration tests and frontend critical-flow tests
 
 ## Intentionally deferred
 
-- [ ] Alembic migrations and production deployment configuration
+- [ ] Production deployment configuration
+- [x] Phase 8C2: enforce JWT authentication and per-user tenant isolation across business APIs
+- [x] Phase 8C3: Web registration/login and shared authenticated API client
+- [x] Phase 8C4: authenticated CSV download and manual sign-out
+- [x] Phase 9: end-to-end demo smoke coverage and final build verification
+- [x] Phase 10: runtime liveness and database readiness probes
+- [ ] Phase 8D: rate limits and deeper security testing
 - [ ] PDF OCR, field-level confidence and cloud OCR provider
-- [ ] Authentication, roles and tenant isolation
 - [ ] Duplicate warning using supplier + invoice number + total
 - [ ] Accounting-system export and advanced analytics
 - [ ] Object storage, malware scanning and document retention policy

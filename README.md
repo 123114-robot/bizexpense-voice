@@ -1,6 +1,8 @@
 # BizExpense Voice
 
-Voice-first expense management for Australian SMEs powered by the AssemblyAI Voice Agent API.
+BizExpense Voice is an AssemblyAI Voice Agent Hackathon extension of the existing BizExpense expense-management MVP.
+
+It preserves the original expense-management architecture and adds a voice-first interaction layer powered by AssemblyAI.
 
 Busy small-business users often need to record expenses while travelling, handling receipts, or doing other work. BizExpense Voice lets them speak naturally to create, query, and correct expenses without navigating forms.
 
@@ -56,6 +58,18 @@ python scripts/create_voice_agent.py
 
 Save the printed ID as `ASSEMBLYAI_AGENT_ID`. The agent exposes only three function tools: `prepare_expense`, `get_expense_summary`, and `prepare_expense_update`.
 
+The synchronized BizExpense foundation also includes:
+
+- Expense create, filtered list/search, CSV export, view, edit and delete
+- PDF/JPEG/PNG upload (10 MB limit) and replaceable Mock/Tesseract `OCRProvider`
+- Mandatory user confirmation on the OCR review screen
+- Database-backed dashboard totals, monthly spend, GST, count, category breakdown and six-month trend
+- Seeded demo admin and ten expense categories
+- FastAPI OpenAPI docs at `http://localhost:8000/docs`
+- Alembic migration baseline, environment-based CORS and request/security headers
+- Trusted-host enforcement and content-signature validation for PDF/JPEG/PNG uploads
+- Authentication foundation with registration, PBKDF2 password hashing, JWT login and current-user lookup
+
 ## Local setup
 
 Prerequisites: Python 3.11+, Node 20+, Docker, an AssemblyAI API key, and a published stored agent.
@@ -67,6 +81,9 @@ docker compose up -d db
 python -m venv backend/.venv
 backend/.venv/Scripts/Activate.ps1
 pip install -r backend/requirements-dev.txt
+cd backend
+python -m alembic upgrade head
+cd ..
 uvicorn app.main:app --reload --app-dir backend --env-file .env
 ```
 
@@ -78,7 +95,15 @@ npm ci
 npm run dev
 ```
 
-Open `http://localhost:5173`, allow microphone access, and start BizExpense Voice from the dashboard.
+Open `http://localhost:5173`. The API reads `DATABASE_URL`, `CORS_ORIGINS` and `ALLOWED_HOSTS`. Development mode still creates missing tables for convenience; production mode requires `python -m alembic upgrade head` before startup. Every API response includes a request ID and baseline browser security headers. Uploads must have a permitted MIME type, matching extension and matching file signature.
+
+Authentication endpoints are available at `/api/auth/register`, `/api/auth/login` and `/api/auth/me`. Set a strong `JWT_SECRET` in production; startup rejects the development default. Expense, supplier, dashboard, document and OCR endpoints require a Bearer token and isolate records by the authenticated user. The current MVP treats each user as one tenant; organization membership can be added later without accepting tenant IDs from clients.
+
+The Web app redirects unauthenticated visitors to `/login`, supports registration, login and sign-out, stores the JWT in local storage for this prototype, and attaches it to API requests and CSV downloads.
+
+Runtime probes are available without authentication: `/api/health` is a lightweight liveness check, while `/api/health/ready` verifies the database connection and returns HTTP 503 when it is unavailable.
+
+After signing in, allow microphone access and start BizExpense Voice from the dashboard.
 
 ## Deployment
 
@@ -117,3 +142,7 @@ Normal automated tests never call AssemblyAI or a real microphone. See [docs/dem
 - Voice updates intentionally support category changes only.
 - GST is never inferred: voice-created expenses use `0.00` GST unless a future explicit flow collects it.
 - Existing OCR, upload, expense management, CSV export, and dashboard features remain unchanged.
+
+The backend smoke suite verifies the primary demo path: registration, JWT authentication, expense creation, dashboard reconciliation, CSV export, document upload and OCR extraction.
+
+See [docs/project-overview.md](docs/project-overview.md), [PROJECT_TASKS.md](PROJECT_TASKS.md), and the remaining `docs/` files for design decisions and future phases.

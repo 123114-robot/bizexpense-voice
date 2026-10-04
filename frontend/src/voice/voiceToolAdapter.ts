@@ -1,3 +1,5 @@
+import { api } from '../services/api'
+
 export type PendingVoiceAction = {
   status: 'confirmation_required'
   pending_action_id: string
@@ -13,16 +15,13 @@ export type VoiceSummary = {
 }
 
 const endpoints: Record<string, string> = {
-  prepare_expense: '/api/voice/tools/prepare-expense',
-  get_expense_summary: '/api/voice/tools/summary',
-  prepare_expense_update: '/api/voice/tools/prepare-update',
+  prepare_expense: '/voice/tools/prepare-expense',
+  get_expense_summary: '/voice/tools/summary',
+  prepare_expense_update: '/voice/tools/prepare-update',
 }
 
 async function jsonRequest<T>(url: string, options: RequestInit): Promise<T> {
-  const response = await fetch(url, options)
-  const body = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(body.detail || 'BizExpense voice tool failed')
-  return body as T
+  return api<T>(url, options)
 }
 
 export const voiceToolAdapter = {
@@ -35,10 +34,8 @@ export const voiceToolAdapter = {
       body: JSON.stringify(args),
     })
   },
-  confirm: (actionId: string) => jsonRequest(`/api/voice/actions/${actionId}/confirm`, { method: 'POST' }),
+  confirm: (actionId: string) => jsonRequest(`/voice/actions/${actionId}/confirm`, { method: 'POST' }),
   async cancel(actionId: string) {
-    const response = await fetch(`/api/voice/actions/${actionId}`, { method: 'DELETE' })
-    if (!response.ok) throw new Error('Unable to cancel pending action')
+    await api<void>(`/voice/actions/${actionId}`, { method: 'DELETE' })
   },
 }
-

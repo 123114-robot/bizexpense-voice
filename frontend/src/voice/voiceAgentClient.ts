@@ -1,6 +1,7 @@
 export type VoiceStatus = 'idle' | 'connecting' | 'ready' | 'listening' | 'processing' | 'confirmation_required' | 'success' | 'error'
 
 import { type PendingVoiceAction, voiceToolAdapter } from './voiceToolAdapter'
+import { api } from '../services/api'
 
 export type { PendingVoiceAction } from './voiceToolAdapter'
 
@@ -50,12 +51,7 @@ export class VoiceAgentClient {
 
   async connect() {
     this.options.onStatus('connecting')
-    const tokenResponse = await fetch('/api/voice/token')
-    if (!tokenResponse.ok) {
-      const body = await tokenResponse.json().catch(() => ({})) as { detail?: string }
-      throw new Error(body.detail || 'Unable to obtain AssemblyAI token')
-    }
-    const { token, agent_id: agentId } = await tokenResponse.json() as { token: string; agent_id: string | null }
+    const { token, agent_id: agentId } = await api<{ token: string; agent_id: string | null }>('/voice/token')
     if (!agentId) throw new Error('ASSEMBLYAI_AGENT_ID is not configured')
 
     try {

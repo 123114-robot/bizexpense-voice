@@ -9,18 +9,20 @@ from app.models.expense import Expense
 
 
 class DashboardService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, user_id: int):
         self.db = db
+        self.user_id = user_id
 
     def summary(self) -> dict:
         total, gst, count = self.db.execute(
             select(func.coalesce(func.sum(Expense.total_amount), 0), func.coalesce(func.sum(Expense.gst_amount), 0), func.count(Expense.id))
-            .where(Expense.ocr_confirmed.is_(True))
+            .where(Expense.ocr_confirmed.is_(True), Expense.user_id == self.user_id)
         ).one()
         today = date.today()
         month_total = self.db.scalar(
             select(func.coalesce(func.sum(Expense.total_amount), 0)).where(
                 Expense.ocr_confirmed.is_(True),
+                Expense.user_id == self.user_id,
                 extract("year", Expense.invoice_date) == today.year,
                 extract("month", Expense.invoice_date) == today.month,
             )
@@ -32,7 +34,7 @@ class DashboardService:
                 func.count(Expense.id).label("expense_count"),
             )
             .join(Expense, Expense.category_id == ExpenseCategory.id)
-            .where(Expense.ocr_confirmed.is_(True))
+            .where(Expense.ocr_confirmed.is_(True), Expense.user_id == self.user_id)
             .group_by(ExpenseCategory.id, ExpenseCategory.name)
             .order_by(func.sum(Expense.total_amount).desc())
         ).all()
@@ -49,6 +51,7 @@ class DashboardService:
             )
             .where(
                 Expense.ocr_confirmed.is_(True),
+                Expense.user_id == self.user_id,
                 Expense.invoice_date >= first_month,
             )
             .group_by(year_expression, month_expression)

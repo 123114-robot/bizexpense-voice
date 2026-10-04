@@ -8,8 +8,9 @@ from app.models.supplier import Supplier
 
 
 class ExpenseRepository:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, user_id: int):
         self.db = db
+        self.user_id = user_id
 
     def list(
         self,
@@ -19,7 +20,7 @@ class ExpenseRepository:
         date_to: date | None = None,
         ocr_confirmed: bool | None = None,
     ) -> list[Expense]:
-        statement = select(Expense).options(joinedload(Expense.supplier), joinedload(Expense.category)).order_by(Expense.invoice_date.desc())
+        statement = select(Expense).options(joinedload(Expense.supplier), joinedload(Expense.category)).where(Expense.user_id == self.user_id).order_by(Expense.invoice_date.desc())
         if search:
             pattern = f"%{search.strip()}%"
             statement = statement.join(Supplier).where(
@@ -36,7 +37,7 @@ class ExpenseRepository:
         return list(self.db.scalars(statement).all())
 
     def get(self, expense_id: int) -> Expense | None:
-        return self.db.scalar(select(Expense).options(joinedload(Expense.supplier), joinedload(Expense.category)).where(Expense.id == expense_id))
+        return self.db.scalar(select(Expense).options(joinedload(Expense.supplier), joinedload(Expense.category)).where(Expense.id == expense_id, Expense.user_id == self.user_id))
 
     def save(self, expense: Expense) -> Expense:
         self.db.add(expense)

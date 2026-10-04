@@ -1,0 +1,2 @@
+import { useEffect,useState } from 'react';import { Navigate,Outlet } from 'react-router-dom'
+export function ProtectedRoute(){const[,refresh]=useState(0);useEffect(()=>{const h=()=>refresh(x=>x+1);window.addEventListener('bizexpense:unauthorized',h);return()=>window.removeEventListener('bizexpense:unauthorized',h)},[]);return localStorage.getItem('bizexpense_token')?<Outlet/>:<Navigate to="/login" replace/>}

@@ -81,7 +81,10 @@ test('confirmation button executes a pending action once', async () => {
   await userEvent.dblClick(confirm)
 
   await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-  expect(fetchMock).toHaveBeenCalledWith('/api/voice/actions/pending-1/confirm', { method: 'POST' })
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/voice/actions/pending-1/confirm',
+    expect.objectContaining({ method: 'POST' }),
+  )
   expect(onMutation).toHaveBeenCalledTimes(1)
 })
 
