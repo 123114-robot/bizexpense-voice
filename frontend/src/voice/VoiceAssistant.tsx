@@ -50,6 +50,15 @@ export function VoiceAssistant({ onMutation }: Props) {
     }
   }
 
+  const stop = () => {
+    client.current?.disconnect()
+    client.current = undefined
+    setMockMode(false)
+    setError('')
+    setStatus('idle')
+    setAgentTranscript('Voice session stopped.')
+  }
+
   const runPrototype = async (action: 'create' | 'summary' | 'search' | 'categories' | 'update') => {
     client.current?.disconnect()
     setMockMode(true)
@@ -151,9 +160,12 @@ export function VoiceAssistant({ onMutation }: Props) {
         <h2 id="voice-assistant-title" className="text-xl font-semibold">BizExpense Voice</h2>
         <p className="text-sm text-slate-500">AssemblyAI-powered voice expense assistant</p>
       </div>
-      <button className="btn-primary" onClick={start} disabled={status === 'connecting'}>
-        {status === 'error' ? 'Retry' : status === 'idle' ? 'Start voice assistant' : 'Reconnect microphone'}
-      </button>
+      <div className="flex gap-2">
+        <button className="btn-primary" onClick={start} disabled={status === 'connecting'}>
+          {status === 'error' ? 'Retry' : status === 'idle' || mockMode ? 'Start voice assistant' : 'Reconnect microphone'}
+        </button>
+        {!mockMode && status !== 'idle' && status !== 'error' && <button className="btn-secondary" onClick={stop}>Stop voice assistant</button>}
+      </div>
     </div>
     <p className="mt-4 text-sm"><strong>Status:</strong> {statusLabels[status]}</p>
     <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3">

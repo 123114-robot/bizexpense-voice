@@ -168,6 +168,17 @@ test('error state renders', async () => {
   expect(disconnect).toHaveBeenCalledTimes(1)
 })
 
+test('active voice session can be stopped', async () => {
+  connect.mockImplementationOnce(async () => clientOptions.onStatus('ready'))
+  render(<VoiceAssistant onMutation={vi.fn()} />)
+
+  await userEvent.click(screen.getByRole('button', { name: 'Start voice assistant' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Stop voice assistant' }))
+
+  expect(disconnect).toHaveBeenCalledTimes(1)
+  expect(screen.getByText((_, element) => element?.tagName === 'P' && element.textContent === 'Status: Idle')).toBeInTheDocument()
+})
+
 test('mock demo disconnects a live microphone session', async () => {
   const fetchMock = vi.fn().mockResolvedValue({
     ok: true,

@@ -27,6 +27,22 @@ function messageFromUnknown(error: unknown) {
   return error instanceof Error ? error.message : 'Voice assistant failed'
 }
 
+function microphoneError(error: unknown) {
+  const name = typeof error === 'object' && error !== null && 'name' in error
+    ? String(error.name)
+    : ''
+  if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+    return 'No microphone input device was found'
+  }
+  if (name === 'NotReadableError' || name === 'TrackStartError') {
+    return 'The microphone is already in use by another application'
+  }
+  if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError') {
+    return 'Microphone permission denied'
+  }
+  return 'Unable to access the microphone'
+}
+
 function bytesToBase64(buffer: ArrayBuffer) {
   const bytes = new Uint8Array(buffer)
   let binary = ''
@@ -55,12 +71,15 @@ export class VoiceAgentClient {
     const { token, agent_id: agentId } = await api<{ token: string; agent_id: string | null }>('/voice/token')
     if (!agentId) throw new Error('ASSEMBLYAI_AGENT_ID is not configured')
 
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Microphone capture is not supported in this browser')
+    }
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       })
     } catch (error) {
-      throw new Error('Microphone permission denied', { cause: error })
+      throw new Error(microphoneError(error), { cause: error })
     }
 
     this.audioContext = new AudioContext({ sampleRate: 24000 })

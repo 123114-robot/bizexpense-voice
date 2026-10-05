@@ -105,6 +105,7 @@ The Web app redirects unauthenticated visitors to `/login`, supports registratio
 Runtime probes are available without authentication: `/api/health` is a lightweight liveness check, while `/api/health/ready` verifies the database connection and returns HTTP 503 when it is unavailable.
 
 After signing in, allow microphone access and start BizExpense Voice from the dashboard.
+The UI reports unsupported capture, denied permission, missing devices, and busy microphones separately, and provides an explicit stop control for live sessions.
 
 ## Deployment
 
