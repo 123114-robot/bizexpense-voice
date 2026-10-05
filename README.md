@@ -50,14 +50,14 @@ The voice layer does not replace the existing REST API, schemas, expense CRUD, d
 
 The backend mints a single-use, 60-second browser token from `GET https://agents.assemblyai.com/v1/token`; the API key never enters the React bundle. The browser then connects to `wss://agents.assemblyai.com/v1/ws` using a stored agent ID.
 
-The stored agent definition is in `assemblyai/agent.json`. It supports creating, querying, searching, and classifying matching expenses. Create it once:
+The stored agent definition is in `assemblyai/agent.json`. It supports creating, querying, searching, and classifying matching expenses. Publish it with:
 
 ```powershell
 $env:ASSEMBLYAI_API_KEY = "your-key"
 python scripts/create_voice_agent.py
 ```
 
-Save the printed ID as `ASSEMBLYAI_AGENT_ID`. The agent exposes five function tools: `prepare_expense`, `get_expense_summary`, `search_expenses`, `list_expense_categories`, and `prepare_expense_update`.
+On the first run, save the printed ID as `ASSEMBLYAI_AGENT_ID`. Later runs update that agent in place when `ASSEMBLYAI_AGENT_ID` is present; clear the variable only when you intentionally want to create another agent. The agent exposes five function tools: `prepare_expense`, `get_expense_summary`, `search_expenses`, `list_expense_categories`, and `prepare_expense_update`.
 
 The synchronized BizExpense foundation also includes:
 
