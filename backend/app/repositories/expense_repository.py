@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
@@ -38,6 +39,25 @@ class ExpenseRepository:
 
     def get(self, expense_id: int) -> Expense | None:
         return self.db.scalar(select(Expense).options(joinedload(Expense.supplier), joinedload(Expense.category)).where(Expense.id == expense_id, Expense.user_id == self.user_id))
+
+    def find_duplicate(
+        self,
+        supplier_id: int,
+        invoice_number: str | None,
+        total_amount: Decimal,
+        exclude_id: int | None = None,
+    ) -> Expense | None:
+        if not invoice_number or not invoice_number.strip():
+            return None
+        statement = select(Expense).where(
+            Expense.user_id == self.user_id,
+            Expense.supplier_id == supplier_id,
+            Expense.invoice_number == invoice_number,
+            Expense.total_amount == total_amount,
+        )
+        if exclude_id is not None:
+            statement = statement.where(Expense.id != exclude_id)
+        return self.db.scalar(statement.order_by(Expense.id).limit(1))
 
     def save(self, expense: Expense) -> Expense:
         self.db.add(expense)

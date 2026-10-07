@@ -68,6 +68,11 @@ def test_dashboard_excludes_unconfirmed_ocr_drafts(auth_client):
     assert summary.json()["expenses_this_month"] == "165.00"
     assert summary.json()["gst_paid"] == "15.00"
     assert summary.json()["expense_count"] == 2
+    assert summary.json()["average_expense"] == "82.50"
+    assert summary.json()["top_suppliers"] == [
+        {"supplier": "Acme Office Supplies", "total": "110.00", "expense_count": 1},
+        {"supplier": "Fuel Station", "total": "55.00", "expense_count": 1},
+    ]
     assert summary.json()["category_breakdown"] == [
         {"category": "Office Supplies", "total": "110.00", "expense_count": 1},
         {"category": "Fuel", "total": "55.00", "expense_count": 1},
@@ -84,6 +89,19 @@ def test_unconfirmed_ocr_expense_is_preserved_as_unconfirmed(auth_client):
     created = client.post("/api/expenses", json=expense_payload(ocr_confirmed=False))
     assert created.status_code == 201
     assert created.json()["ocr_confirmed"] is False
+
+
+def test_duplicate_expense_is_saved_with_non_blocking_warning(auth_client):
+    client = auth_client
+    first = client.post("/api/expenses", json=expense_payload(invoice_number="DUP-1"))
+    second = client.post("/api/expenses", json=expense_payload(invoice_number="DUP-1"))
+
+    assert first.status_code == 201
+    assert first.json()["duplicate_warning"] is False
+    assert second.status_code == 201
+    assert second.json()["duplicate_warning"] is True
+    assert second.json()["duplicate_expense_id"] == first.json()["id"]
+    assert len(client.get("/api/expenses").json()) == 2
 
 
 def test_expense_filters_and_csv_export_use_the_same_results(auth_client):

@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -12,7 +13,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.user import User
-from app.schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserRead
+from app.models.refresh_token import RefreshToken
+from app.schemas.auth import (
+    AuthResponse,
+    LoginRequest,
+    RefreshTokenRequest,
+    RegisterRequest,
+    UserRead,
+)
 
 ALGORITHM = "HS256"
 HASH_ITERATIONS = 600_000
@@ -62,13 +70,31 @@ class AuthService:
             minutes=self.settings.access_token_minutes
         )
         return jwt.encode(
-            {"sub": str(user.id), "exp": expires},
+            {"sub": str(user.id), "exp": expires, "type": "access"},
             self.settings.jwt_secret,
             algorithm=ALGORITHM,
         )
 
+    @staticmethod
+    def _refresh_token_hash(token: str) -> str:
+        return hashlib.sha256(token.encode()).hexdigest()
+
     def _response(self, user: User) -> AuthResponse:
-        return AuthResponse(access_token=self._token(user), user=UserRead.model_validate(user))
+        raw_refresh_token = secrets.token_urlsafe(48)
+        self.db.add(
+            RefreshToken(
+                user_id=user.id,
+                token_hash=self._refresh_token_hash(raw_refresh_token),
+                expires_at=datetime.now(timezone.utc)
+                + timedelta(days=self.settings.refresh_token_days),
+            )
+        )
+        self.db.commit()
+        return AuthResponse(
+            access_token=self._token(user),
+            refresh_token=raw_refresh_token,
+            user=UserRead.model_validate(user),
+        )
 
     def register(self, payload: RegisterRequest) -> AuthResponse:
         email = payload.email.lower()
@@ -101,11 +127,42 @@ class AuthService:
             raise HTTPException(401, "Invalid email or password")
         return self._response(user)
 
+    def refresh(self, payload: RefreshTokenRequest) -> AuthResponse:
+        token = self.db.scalar(
+            select(RefreshToken)
+            .where(
+                RefreshToken.token_hash
+                == self._refresh_token_hash(payload.refresh_token)
+            )
+            .with_for_update()
+        )
+        now = datetime.now(timezone.utc)
+        expires_at = token.expires_at if token else None
+        if expires_at and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if not token or token.revoked_at or not expires_at or expires_at <= now:
+            raise HTTPException(401, "Invalid or expired refresh token")
+        token.revoked_at = now
+        return self._response(token.user)
+
+    def logout(self, payload: RefreshTokenRequest) -> None:
+        token = self.db.scalar(
+            select(RefreshToken).where(
+                RefreshToken.token_hash
+                == self._refresh_token_hash(payload.refresh_token)
+            )
+        )
+        if token and not token.revoked_at:
+            token.revoked_at = datetime.now(timezone.utc)
+            self.db.commit()
+
     def user_from_token(self, token: str) -> User:
         try:
             payload = jwt.decode(
                 token, self.settings.jwt_secret, algorithms=[ALGORITHM]
             )
+            if payload.get("type") not in (None, "access"):
+                raise ValueError("Unexpected token type")
             user_id = int(payload["sub"])
         except (jwt.PyJWTError, KeyError, TypeError, ValueError) as exc:
             raise HTTPException(401, "Invalid or expired access token") from exc

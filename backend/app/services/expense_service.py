@@ -18,12 +18,19 @@ class ExpenseService:
         self.user = user
         self.repo = ExpenseRepository(db, user.id)
 
-    @staticmethod
-    def serialize(expense: Expense) -> ExpenseRead:
+    def serialize(self, expense: Expense) -> ExpenseRead:
+        duplicate = self.repo.find_duplicate(
+            expense.supplier_id,
+            expense.invoice_number,
+            expense.total_amount,
+            exclude_id=expense.id,
+        )
         return ExpenseRead.model_validate({
             **{field: getattr(expense, field) for field in ExpenseRead.model_fields if hasattr(expense, field)},
             "supplier_name": expense.supplier.name,
             "category_name": expense.category.name,
+            "duplicate_warning": duplicate is not None,
+            "duplicate_expense_id": duplicate.id if duplicate else None,
         })
 
     def list(
@@ -80,5 +87,3 @@ class ExpenseService:
         if not expense:
             raise HTTPException(404, "Expense not found")
         self.repo.delete(expense)
-
-    # TODO: add non-blocking duplicate warning based on supplier + invoice_number + total_amount.

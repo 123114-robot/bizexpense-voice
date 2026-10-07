@@ -98,14 +98,18 @@ npm run dev
 
 Open `http://localhost:5173`. The API reads `DATABASE_URL`, `CORS_ORIGINS` and `ALLOWED_HOSTS`. Development mode still creates missing tables for convenience; production mode requires `python -m alembic upgrade head` before startup. Every API response includes a request ID and baseline browser security headers. Uploads must have a permitted MIME type, matching extension and matching file signature.
 
-Authentication endpoints are available at `/api/auth/register`, `/api/auth/login` and `/api/auth/me`. Set a strong `JWT_SECRET` in production; startup rejects the development default. Expense, supplier, dashboard, document and OCR endpoints require a Bearer token and isolate records by the authenticated user. The current MVP treats each user as one tenant; organization membership can be added later without accepting tenant IDs from clients.
+Authentication endpoints are available at `/api/auth/register`, `/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout` and `/api/auth/me`. Login and registration return a short-lived JWT access token plus a rotating opaque refresh token. Refresh tokens are stored only as SHA-256 hashes, can be revoked at logout, and cannot be reused after rotation. Set a strong `JWT_SECRET` in production; startup rejects the development default. Expense, supplier, dashboard, document and OCR endpoints require a Bearer token and isolate records by the authenticated user. The current MVP treats each user as one tenant; organization membership can be added later without accepting tenant IDs from clients.
 
-The Web app redirects unauthenticated visitors to `/login`, supports registration, login and sign-out, stores the JWT in local storage for this prototype, and attaches it to API requests and CSV downloads.
+The Web app redirects unauthenticated visitors to `/login`, supports registration, login and server-side sign-out, stores the access/refresh token pair in local storage for this prototype, and attaches the access token to API requests and CSV downloads. A shared API client performs one refresh-token rotation and retries the original request after an expired access token; failed refresh clears both tokens. For a higher-security production deployment, move the refresh token to a Secure, HttpOnly, SameSite cookie with an explicit CSRF design.
 
 Runtime probes are available without authentication: `/api/health` is a lightweight liveness check, while `/api/health/ready` verifies the database connection and returns HTTP 503 when it is unavailable.
 
 After signing in, allow microphone access and start BizExpense Voice from the dashboard.
 The UI reports unsupported capture, denied permission, missing devices, and busy microphones separately, and provides an explicit stop control for live sessions.
+
+Authentication, document upload and OCR extraction endpoints use configurable per-client rate limits and return HTTP 429 with `Retry-After` when exceeded. Configure the shared window and endpoint limits with `RATE_LIMIT_WINDOW_SECONDS`, `AUTH_RATE_LIMIT_REQUESTS`, `UPLOAD_RATE_LIMIT_REQUESTS` and `OCR_RATE_LIMIT_REQUESTS`. The MVP limiter is process-local; a multi-worker deployment should replace its storage with a shared Redis-backed limiter.
+
+Mock OCR is the default. The Tesseract integration supports PNG/JPEG directly and renders the first page of a PDF locally before OCR; enable it with `OCR_PROVIDER=tesseract`. An optional OpenAI-compatible Vision provider supports PNG/JPEG input through `OCR_PROVIDER=vision`, `VISION_API_KEY`, `VISION_BASE_URL` and `VISION_MODEL`. Vision responses are validated for dates, non-negative amounts, GST/total consistency, currency and confidence, always remain unconfirmed, and still require user review. Invoice images are sent to the configured provider, so its privacy, retention and billing terms must be reviewed before use. Multi-page PDF OCR, broad layout validation and production accuracy against a representative real-invoice dataset remain deferred.
 
 ## Deployment
 

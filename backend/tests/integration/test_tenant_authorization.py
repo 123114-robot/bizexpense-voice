@@ -42,6 +42,12 @@ def test_expenses_suppliers_and_dashboard_are_isolated_by_user(client):
     assert client.get(f"/api/expenses/{expense_id}", headers=second).status_code == 404
     assert client.get("/api/suppliers", headers=second).json() == []
     assert client.get("/api/dashboard/summary", headers=second).json()["expense_count"] == 0
+    assert client.put(
+        f"/api/expenses/{expense_id}", json=expense_payload(), headers=second
+    ).status_code == 404
+    assert client.delete(
+        f"/api/expenses/{expense_id}", headers=second
+    ).status_code == 404
 
     assert len(client.get("/api/expenses", headers=first).json()) == 1
     assert len(client.get("/api/suppliers", headers=first).json()) == 1

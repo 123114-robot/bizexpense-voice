@@ -52,4 +52,5 @@ class ExpenseRead(BaseModel):
     ocr_confirmed: bool
     created_at: datetime
     updated_at: datetime
-
+    duplicate_warning: bool = False
+    duplicate_expense_id: int | None = None
