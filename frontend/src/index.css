@@ -6,3 +6,4 @@ button, input, select, textarea { font: inherit; }
 .btn-secondary { @apply inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 font-medium text-slate-700 hover:bg-slate-50; }
 .field { @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100; }
 label { @apply grid gap-1 text-sm font-medium text-slate-700; }
+.skip-link { @apply fixed left-4 top-4 z-50 -translate-y-24 rounded-lg bg-white px-4 py-2 font-medium text-teal-800 shadow focus:translate-y-0; }

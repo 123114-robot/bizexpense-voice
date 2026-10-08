@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.api.auth import current_user
+from app.models.user import User
 from app.schemas.expense import ExpenseCreate, ExpenseRead, ExpenseUpdate
 from app.services.expense_service import ExpenseService
 
@@ -24,8 +26,9 @@ def _filtered_expenses(
     date_from: date | None,
     date_to: date | None,
     ocr_confirmed: bool | None,
+    user: User,
 ) -> list[ExpenseRead]:
-    return ExpenseService(db).list(
+    return ExpenseService(db, user).list(
         search, category_id, date_from, date_to, ocr_confirmed
     )
 
@@ -38,9 +41,10 @@ def list_expenses(
     date_to: date | None = None,
     ocr_confirmed: bool | None = None,
     db: Session = Depends(get_db),
+    user: User = Depends(current_user),
 ):
     return _filtered_expenses(
-        db, search, category_id, date_from, date_to, ocr_confirmed
+        db, search, category_id, date_from, date_to, ocr_confirmed, user
     )
 
 
@@ -52,9 +56,10 @@ def export_expenses(
     date_to: date | None = None,
     ocr_confirmed: bool | None = None,
     db: Session = Depends(get_db),
+    user: User = Depends(current_user),
 ):
     expenses = _filtered_expenses(
-        db, search, category_id, date_from, date_to, ocr_confirmed
+        db, search, category_id, date_from, date_to, ocr_confirmed, user
     )
     output = StringIO()
     writer = csv.writer(output, lineterminator="\n")
@@ -100,21 +105,21 @@ def export_expenses(
 
 
 @router.post("", response_model=ExpenseRead, status_code=status.HTTP_201_CREATED)
-def create_expense(payload: ExpenseCreate, db: Session = Depends(get_db)):
-    return ExpenseService(db).create(payload)
+def create_expense(payload: ExpenseCreate, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return ExpenseService(db, user).create(payload)
 
 
 @router.get("/{expense_id}", response_model=ExpenseRead)
-def get_expense(expense_id: int, db: Session = Depends(get_db)):
-    return ExpenseService(db).get(expense_id)
+def get_expense(expense_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return ExpenseService(db, user).get(expense_id)
 
 
 @router.put("/{expense_id}", response_model=ExpenseRead)
-def update_expense(expense_id: int, payload: ExpenseUpdate, db: Session = Depends(get_db)):
-    return ExpenseService(db).update(expense_id, payload)
+def update_expense(expense_id: int, payload: ExpenseUpdate, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return ExpenseService(db, user).update(expense_id, payload)
 
 
 @router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_expense(expense_id: int, db: Session = Depends(get_db)):
-    ExpenseService(db).delete(expense_id)
+def delete_expense(expense_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    ExpenseService(db, user).delete(expense_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

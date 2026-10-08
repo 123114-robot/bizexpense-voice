@@ -18,8 +18,11 @@ vi.mock('../voice/voiceAgentClient', () => ({
   },
 }))
 
-afterEach(() => {
+beforeEach(() => {
   vi.clearAllMocks()
+})
+
+afterEach(() => {
   vi.unstubAllGlobals()
 })
 
@@ -52,6 +55,72 @@ test('mock query uses the BizExpense voice tool adapter', async () => {
   expect(fetchMock).toHaveBeenCalledWith('/api/voice/tools/summary', expect.objectContaining({ method: 'POST' }))
 })
 
+test('mock search queries confirmed expenses by supplier', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      count: 1,
+      expenses: [{ supplier_name: 'Woolworths', total_amount: '38.50', invoice_date: '2026-09-30' }],
+    }),
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  render(<VoiceAssistant onMutation={vi.fn()} />)
+
+  await userEvent.click(screen.getByRole('button', { name: 'Demo search' }))
+
+  expect(await screen.findByText(/Woolworths expense for \$38.50/)).toBeInTheDocument()
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/voice/tools/search-expenses',
+    expect.objectContaining({ method: 'POST' }),
+  )
+})
+
+test('mock categories reads the available BizExpense categories', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ categories: ['Office Supplies', 'Fuel', 'Travel'] }),
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  render(<VoiceAssistant onMutation={vi.fn()} />)
+
+  await userEvent.click(screen.getByRole('button', { name: 'Demo categories' }))
+
+  expect(await screen.findByText(/available categories are Office Supplies, Fuel, and Travel/i)).toBeInTheDocument()
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/voice/tools/categories',
+    expect.objectContaining({ method: 'POST' }),
+  )
+})
+
+test('mock category update targets the spoken supplier', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      status: 'confirmation_required',
+      pending_action_id: 'pending-category',
+      action: 'update_expense',
+      preview: {
+        supplier_name: 'Woolworths',
+        current_category: 'Other',
+        proposed_category: 'Office Supplies',
+      },
+    }),
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  render(<VoiceAssistant onMutation={vi.fn()} />)
+
+  await userEvent.click(screen.getByRole('button', { name: 'Demo category update' }))
+
+  expect(await screen.findByText(/prepared the Woolworths category change/i)).toBeInTheDocument()
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/voice/tools/prepare-update',
+    expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ category_name: 'Office Supplies', search: 'Woolworths' }),
+    }),
+  )
+})
+
 test('confirmation button executes a pending action once', async () => {
   connect.mockImplementation(async () => {
     clientOptions.onStatus('ready')
@@ -81,7 +150,10 @@ test('confirmation button executes a pending action once', async () => {
   await userEvent.dblClick(confirm)
 
   await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-  expect(fetchMock).toHaveBeenCalledWith('/api/voice/actions/pending-1/confirm', { method: 'POST' })
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/voice/actions/pending-1/confirm',
+    expect.objectContaining({ method: 'POST' }),
+  )
   expect(onMutation).toHaveBeenCalledTimes(1)
 })
 
@@ -93,4 +165,36 @@ test('error state renders', async () => {
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Microphone permission denied')
   expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  expect(disconnect).toHaveBeenCalledTimes(1)
+})
+
+test('active voice session can be stopped', async () => {
+  connect.mockImplementationOnce(async () => clientOptions.onStatus('ready'))
+  render(<VoiceAssistant onMutation={vi.fn()} />)
+
+  await userEvent.click(screen.getByRole('button', { name: 'Start voice assistant' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Stop voice assistant' }))
+
+  expect(disconnect).toHaveBeenCalledTimes(1)
+  expect(screen.getByText((_, element) => element?.tagName === 'P' && element.textContent === 'Status: Idle')).toBeInTheDocument()
+})
+
+test('mock demo disconnects a live microphone session', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      total_expenses: '120.00',
+      expenses_this_month: '38.50',
+      gst_paid: '0.00',
+      category_breakdown: [],
+    }),
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  render(<VoiceAssistant onMutation={vi.fn()} />)
+
+  await userEvent.click(screen.getByRole('button', { name: 'Start voice assistant' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Demo query' }))
+
+  expect(disconnect).toHaveBeenCalledTimes(1)
+  expect(await screen.findByText('Mock voice mode')).toBeInTheDocument()
 })

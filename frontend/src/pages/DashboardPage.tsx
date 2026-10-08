@@ -14,6 +14,7 @@ export function DashboardPage() {
     ['Expenses this month', data?.expenses_this_month],
     ['GST paid', data?.gst_paid],
     ['Number of expenses', data?.expense_count],
+    ['Average expense', data?.average_expense],
   ]
   const trendMaximum = Math.max(...(data?.monthly_trend.map(item => Number(item.total)) ?? [0]), 1)
 
@@ -21,14 +22,14 @@ export function DashboardPage() {
     <h1 className="mb-1 text-3xl font-bold">Dashboard</h1>
     <p className="mb-6 text-slate-600">A clear view of your confirmed business spending.</p>
     <VoiceAssistant onMutation={loadDashboard} />
-    <div className="grid gap-4 md:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-5">
       {cards.map(([label, value]) => <div className="card" key={label}>
         <p className="text-sm text-slate-500">{label}</p>
         <p className="mt-2 text-2xl font-bold">{value ?? '—'}</p>
       </div>)}
     </div>
 
-    <div className="mt-6 grid gap-6 lg:grid-cols-2">
+    <div className="mt-6 grid gap-6 lg:grid-cols-3">
       <section className="card">
         <h2 className="text-lg font-semibold">Spending by category</h2>
         <p className="mb-4 text-sm text-slate-500">Confirmed expenses only</p>
@@ -38,6 +39,18 @@ export function DashboardPage() {
             <p className="font-semibold">AUD ${item.total}</p>
           </div>)}
           {data?.category_breakdown.length === 0 && <p className="text-sm text-slate-500">No confirmed expenses yet.</p>}
+        </div>
+      </section>
+
+      <section className="card">
+        <h2 className="text-lg font-semibold">Top suppliers</h2>
+        <p className="mb-4 text-sm text-slate-500">Highest confirmed spend</p>
+        <div className="grid gap-3">
+          {data?.top_suppliers.map(item => <div key={item.supplier} className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div><p className="font-medium">{item.supplier}</p><p className="text-xs text-slate-500">{item.expense_count} expense{item.expense_count === 1 ? '' : 's'}</p></div>
+            <p className="font-semibold">AUD ${item.total}</p>
+          </div>)}
+          {data?.top_suppliers.length === 0 && <p className="text-sm text-slate-500">No confirmed expenses yet.</p>}
         </div>
       </section>
 

@@ -1,6 +1,7 @@
 export type VoiceStatus = 'idle' | 'connecting' | 'ready' | 'listening' | 'processing' | 'confirmation_required' | 'success' | 'error'
 
 import { type PendingVoiceAction, voiceToolAdapter } from './voiceToolAdapter'
+import { api } from '../services/api'
 
 export type { PendingVoiceAction } from './voiceToolAdapter'
 
@@ -20,9 +21,26 @@ type ToolCall = {
 }
 
 type ToolResult = { callId: string; result: unknown }
+const CONNECTION_TIMEOUT_MS = 15_000
 
 function messageFromUnknown(error: unknown) {
   return error instanceof Error ? error.message : 'Voice assistant failed'
+}
+
+function microphoneError(error: unknown) {
+  const name = typeof error === 'object' && error !== null && 'name' in error
+    ? String(error.name)
+    : ''
+  if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+    return 'No microphone input device was found'
+  }
+  if (name === 'NotReadableError' || name === 'TrackStartError') {
+    return 'The microphone is already in use by another application'
+  }
+  if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError') {
+    return 'Microphone permission denied'
+  }
+  return 'Unable to access the microphone'
 }
 
 function bytesToBase64(buffer: ArrayBuffer) {
@@ -50,20 +68,18 @@ export class VoiceAgentClient {
 
   async connect() {
     this.options.onStatus('connecting')
-    const tokenResponse = await fetch('/api/voice/token')
-    if (!tokenResponse.ok) {
-      const body = await tokenResponse.json().catch(() => ({})) as { detail?: string }
-      throw new Error(body.detail || 'Unable to obtain AssemblyAI token')
-    }
-    const { token, agent_id: agentId } = await tokenResponse.json() as { token: string; agent_id: string | null }
+    const { token, agent_id: agentId } = await api<{ token: string; agent_id: string | null }>('/voice/token')
     if (!agentId) throw new Error('ASSEMBLYAI_AGENT_ID is not configured')
 
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Microphone capture is not supported in this browser')
+    }
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       })
     } catch (error) {
-      throw new Error('Microphone permission denied', { cause: error })
+      throw new Error(microphoneError(error), { cause: error })
     }
 
     this.audioContext = new AudioContext({ sampleRate: 24000 })
@@ -93,6 +109,12 @@ export class VoiceAgentClient {
       if (this.ready) this.options.onError('AssemblyAI voice session disconnected')
       this.ready = false
     })
+    try {
+      await this.waitForReady()
+    } catch (error) {
+      this.disconnect()
+      throw error
+    }
   }
 
   disconnect() {
@@ -106,6 +128,41 @@ export class VoiceAgentClient {
 
   private send(payload: unknown) {
     this.socket?.send(JSON.stringify(payload))
+  }
+
+  private waitForReady() {
+    const socket = this.socket
+    if (!socket) return Promise.reject(new Error('AssemblyAI WebSocket was not created'))
+    return new Promise<void>((resolve, reject) => {
+      const finish = (error?: Error) => {
+        clearTimeout(timeout)
+        socket.removeEventListener('message', onMessage)
+        socket.removeEventListener('error', onError)
+        socket.removeEventListener('close', onClose)
+        if (error) reject(error)
+        else resolve()
+      }
+      const onMessage = (event: MessageEvent) => {
+        try {
+          const message = JSON.parse(String(event.data)) as Record<string, unknown>
+          if (message.type === 'session.ready') finish()
+          if (message.type === 'session.error') {
+            finish(new Error(String(message.message || 'AssemblyAI session error')))
+          }
+        } catch {
+          finish(new Error('AssemblyAI returned an invalid session message'))
+        }
+      }
+      const onError = () => finish(new Error('AssemblyAI WebSocket connection failed'))
+      const onClose = () => finish(new Error('AssemblyAI connection closed before it was ready'))
+      const timeout = window.setTimeout(
+        () => finish(new Error('AssemblyAI connection timed out. Please retry.')),
+        CONNECTION_TIMEOUT_MS,
+      )
+      socket.addEventListener('message', onMessage)
+      socket.addEventListener('error', onError)
+      socket.addEventListener('close', onClose)
+    })
   }
 
   private async handleEvent(event: Record<string, unknown>) {

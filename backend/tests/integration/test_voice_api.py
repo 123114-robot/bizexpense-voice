@@ -3,8 +3,10 @@ from decimal import Decimal
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import select
 
 from app.api.voice import pending_actions
+from app.models.user import User
 from app.schemas.expense import ExpenseCreate
 from app.services.expense_service import ExpenseService
 
@@ -16,12 +18,21 @@ def clear_pending_actions():
     pending_actions.clear()
 
 
-def create_expense(db, *, category_id=1, total="110.00", confirmed=True):
-    return ExpenseService(db).create(
+def create_expense(
+    db,
+    *,
+    supplier_name="Acme",
+    category_id=1,
+    total="110.00",
+    confirmed=True,
+    invoice_date=date(2026, 9, 30),
+):
+    user = db.scalar(select(User).where(User.email == "owner@example.com"))
+    return ExpenseService(db, user).create(
         ExpenseCreate(
-            supplier_name="Acme",
+            supplier_name=supplier_name,
             category_id=category_id,
-            invoice_date=date(2026, 9, 30),
+            invoice_date=invoice_date,
             subtotal=Decimal(total),
             gst_amount=Decimal("10.00"),
             total_amount=Decimal(total),
@@ -32,16 +43,22 @@ def create_expense(db, *, category_id=1, total="110.00", confirmed=True):
     )
 
 
-def test_voice_token_requires_server_configuration(client, monkeypatch):
+def test_voice_token_requires_server_configuration(auth_client, monkeypatch):
     monkeypatch.delenv("ASSEMBLYAI_API_KEY", raising=False)
 
-    response = client.get("/api/voice/token")
+    response = auth_client.get("/api/voice/token")
 
     assert response.status_code == 503
     assert response.json()["detail"] == "AssemblyAI is not configured"
 
 
-def test_voice_token_is_minted_server_side(client, monkeypatch):
+def test_voice_tools_require_authentication(client):
+    response = client.post("/api/voice/tools/summary", json={})
+
+    assert response.status_code == 401
+
+
+def test_voice_token_is_minted_server_side(auth_client, monkeypatch):
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "server-only-key")
     monkeypatch.setenv("ASSEMBLYAI_AGENT_ID", "agent-123")
     captured = {}
@@ -60,7 +77,7 @@ def test_voice_token_is_minted_server_side(client, monkeypatch):
 
     monkeypatch.setattr("app.api.voice.httpx.get", fake_get)
 
-    response = client.get("/api/voice/token")
+    response = auth_client.get("/api/voice/token")
 
     assert response.status_code == 200
     assert response.json() == {
@@ -72,18 +89,65 @@ def test_voice_token_is_minted_server_side(client, monkeypatch):
     assert captured["params"]["expires_in_seconds"] == 60
 
 
-def test_voice_summary(client, db):
+def test_voice_summary(auth_client, db):
     create_expense(db)
 
-    response = client.post("/api/voice/tools/summary", json={})
+    response = auth_client.post("/api/voice/tools/summary", json={})
 
     assert response.status_code == 200
     assert response.json()["total_expenses"] == "110.00"
     assert response.json()["gst_paid"] == "10.00"
 
 
-def test_prepare_expense(client):
-    response = client.post(
+def test_voice_lists_existing_categories(auth_client):
+    response = auth_client.post("/api/voice/tools/categories", json={})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "categories": [
+            "Office Supplies",
+            "Fuel",
+            "Travel",
+            "Software",
+            "Utilities",
+            "Meals",
+            "Equipment",
+            "Professional Services",
+            "Marketing",
+            "Other",
+        ]
+    }
+
+
+def test_voice_search_expenses_by_supplier_and_category(auth_client, db):
+    create_expense(db, supplier_name="Woolworths", category_id=1, total="38.50")
+    create_expense(db, supplier_name="Caltex", category_id=2, total="72.00")
+
+    supplier_result = auth_client.post(
+        "/api/voice/tools/search-expenses", json={"search": "Woolworths"}
+    ).json()
+    category_result = auth_client.post(
+        "/api/voice/tools/search-expenses", json={"category_name": "Fuel"}
+    ).json()
+
+    assert supplier_result["count"] == 1
+    assert supplier_result["expenses"][0]["supplier_name"] == "Woolworths"
+    assert supplier_result["expenses"][0]["total_amount"] == "38.50"
+    assert category_result["count"] == 1
+    assert category_result["expenses"][0]["supplier_name"] == "Caltex"
+
+
+def test_voice_search_rejects_unknown_category(auth_client):
+    response = auth_client.post(
+        "/api/voice/tools/search-expenses", json={"category_name": "Imaginary"}
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Unknown category: Imaginary"
+
+
+def test_prepare_expense(auth_client):
+    response = auth_client.post(
         "/api/voice/tools/prepare-expense",
         json={
             "supplier_name": "Woolworths",
@@ -106,8 +170,8 @@ def test_prepare_expense(client):
     }
 
 
-def test_prepare_expense_resolves_today(client):
-    response = client.post(
+def test_prepare_expense_resolves_today(auth_client):
+    response = auth_client.post(
         "/api/voice/tools/prepare-expense",
         json={
             "supplier_name": "Woolworths",
@@ -127,15 +191,15 @@ def test_prepare_expense_resolves_today(client):
         ({"amount": "10.00", "invoice_date": "2026-09-30"}, "supplier_name"),
     ],
 )
-def test_prepare_expense_requires_fields(client, payload, field):
-    response = client.post("/api/voice/tools/prepare-expense", json=payload)
+def test_prepare_expense_requires_fields(auth_client, payload, field):
+    response = auth_client.post("/api/voice/tools/prepare-expense", json=payload)
 
     assert response.status_code == 422
     assert field in response.text
 
 
-def test_confirm_create_expense(client):
-    prepared = client.post(
+def test_confirm_create_expense(auth_client):
+    prepared = auth_client.post(
         "/api/voice/tools/prepare-expense",
         json={
             "supplier_name": "Woolworths",
@@ -145,7 +209,7 @@ def test_confirm_create_expense(client):
         },
     ).json()
 
-    response = client.post(
+    response = auth_client.post(
         f"/api/voice/actions/{prepared['pending_action_id']}/confirm"
     )
 
@@ -156,8 +220,8 @@ def test_confirm_create_expense(client):
     assert body["expense"]["ocr_confirmed"] is True
 
 
-def test_confirmation_is_idempotent(client):
-    prepared = client.post(
+def test_confirmation_is_idempotent(auth_client):
+    prepared = auth_client.post(
         "/api/voice/tools/prepare-expense",
         json={
             "supplier_name": "Woolworths",
@@ -167,15 +231,42 @@ def test_confirmation_is_idempotent(client):
     ).json()
     url = f"/api/voice/actions/{prepared['pending_action_id']}/confirm"
 
-    assert client.post(url).status_code == 200
-    duplicate = client.post(url)
+    assert auth_client.post(url).status_code == 200
+    duplicate = auth_client.post(url)
 
     assert duplicate.status_code == 409
     assert duplicate.json()["detail"] == "Pending action already executed"
 
 
-def test_failed_confirmation_can_be_retried(client, monkeypatch):
-    prepared = client.post(
+def test_pending_action_is_isolated_by_user(auth_client):
+    prepared = auth_client.post(
+        "/api/voice/tools/prepare-expense",
+        json={
+            "supplier_name": "Woolworths",
+            "amount": "38.50",
+            "invoice_date": "2026-09-30",
+        },
+    ).json()
+    other = auth_client.post(
+        "/api/auth/register",
+        json={
+            "name": "Other Owner",
+            "email": "other@example.com",
+            "password": "secure-password-456",
+        },
+    ).json()
+
+    response = auth_client.post(
+        f"/api/voice/actions/{prepared['pending_action_id']}/confirm",
+        headers={"Authorization": f"Bearer {other['access_token']}"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Pending action not found"
+
+
+def test_failed_confirmation_can_be_retried(auth_client, monkeypatch):
+    prepared = auth_client.post(
         "/api/voice/tools/prepare-expense",
         json={
             "supplier_name": "Woolworths",
@@ -190,16 +281,16 @@ def test_failed_confirmation_can_be_retried(client, monkeypatch):
         raise HTTPException(500, "Database unavailable")
 
     monkeypatch.setattr(ExpenseService, "create", fail_create)
-    assert client.post(url).status_code == 500
+    assert auth_client.post(url).status_code == 500
     monkeypatch.setattr(ExpenseService, "create", original_create)
 
-    assert client.post(url).status_code == 200
+    assert auth_client.post(url).status_code == 200
 
 
-def test_prepare_update_latest_expense(client, db):
+def test_prepare_update_latest_expense(auth_client, db):
     expense = create_expense(db, category_id=2)
 
-    response = client.post(
+    response = auth_client.post(
         "/api/voice/tools/prepare-update",
         json={"category_name": "Office Supplies"},
     )
@@ -212,14 +303,40 @@ def test_prepare_update_latest_expense(client, db):
     assert body["preview"]["proposed_category"] == "Office Supplies"
 
 
-def test_update_preserves_existing_fields(client, db):
+def test_prepare_update_targets_matching_expense(auth_client, db):
+    target = create_expense(
+        db,
+        supplier_name="Woolworths",
+        category_id=3,
+        invoice_date=date(2026, 9, 29),
+    )
+    create_expense(
+        db,
+        supplier_name="Caltex",
+        category_id=2,
+        invoice_date=date(2026, 9, 30),
+    )
+
+    response = auth_client.post(
+        "/api/voice/tools/prepare-update",
+        json={"category_name": "Office Supplies", "search": "Woolworths"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["preview"]["expense_id"] == target.id
+    assert body["preview"]["supplier_name"] == "Woolworths"
+    assert body["preview"]["current_category"] == "Travel"
+
+
+def test_update_preserves_existing_fields(auth_client, db):
     expense = create_expense(db, category_id=2, total="55.00")
-    prepared = client.post(
+    prepared = auth_client.post(
         "/api/voice/tools/prepare-update",
         json={"category_name": "Office Supplies"},
     ).json()
 
-    result = client.post(
+    result = auth_client.post(
         f"/api/voice/actions/{prepared['pending_action_id']}/confirm"
     ).json()["expense"]
 

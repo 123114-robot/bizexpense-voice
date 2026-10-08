@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { VoiceAgentClient, type PendingVoiceAction, type VoiceStatus } from './voiceAgentClient'
-import { type VoiceSummary, voiceToolAdapter } from './voiceToolAdapter'
+import { type VoiceCategories, type VoiceSearchResult, type VoiceSummary, voiceToolAdapter } from './voiceToolAdapter'
 
 type Props = { onMutation: () => void }
 
@@ -44,12 +44,23 @@ export function VoiceAssistant({ onMutation }: Props) {
     try {
       await next.connect()
     } catch (caught) {
+      next.disconnect()
       setError(caught instanceof Error ? caught.message : 'Unable to start voice assistant')
       setStatus('error')
     }
   }
 
-  const runPrototype = async (action: 'create' | 'summary' | 'update') => {
+  const stop = () => {
+    client.current?.disconnect()
+    client.current = undefined
+    setMockMode(false)
+    setError('')
+    setStatus('idle')
+    setAgentTranscript('Voice session stopped.')
+  }
+
+  const runPrototype = async (action: 'create' | 'summary' | 'search' | 'categories' | 'update') => {
+    client.current?.disconnect()
     setMockMode(true)
     setError('')
     setPending(undefined)
@@ -57,7 +68,9 @@ export function VoiceAssistant({ onMutation }: Props) {
     const examples = {
       create: 'I spent $38.50 at Woolworths today.',
       summary: 'How much did I spend this month?',
-      update: 'Change my last expense to office supplies.',
+      search: 'Show my Woolworths expenses.',
+      categories: 'What expense categories can I use?',
+      update: 'Classify my Woolworths expense as office supplies.',
     }
     setUserTranscript(examples[action])
     try {
@@ -67,16 +80,39 @@ export function VoiceAssistant({ onMutation }: Props) {
         setStatus('success')
         return
       }
+      if (action === 'search') {
+        const result = await voiceToolAdapter.callTool(
+          'search_expenses',
+          { search: 'Woolworths' },
+        ) as VoiceSearchResult
+        const first = result.expenses[0]
+        setAgentTranscript(first
+          ? `I found ${first.supplier_name} expense for $${first.total_amount} on ${first.invoice_date}.`
+          : 'I found no confirmed Woolworths expenses.')
+        setStatus('success')
+        return
+      }
+      if (action === 'categories') {
+        const result = await voiceToolAdapter.callTool(
+          'list_expense_categories',
+          {},
+        ) as VoiceCategories
+        const last = result.categories.at(-1)
+        const leading = result.categories.slice(0, -1).join(', ')
+        setAgentTranscript(`Available categories are ${leading}${leading ? ', and ' : ''}${last ?? 'none'}.`)
+        setStatus('success')
+        return
+      }
       const result = await voiceToolAdapter.callTool(
         action === 'create' ? 'prepare_expense' : 'prepare_expense_update',
         action === 'create'
           ? { supplier_name: 'Woolworths', amount: 38.5, invoice_date: 'today' }
-          : { category_name: 'Office Supplies' },
+          : { category_name: 'Office Supplies', search: 'Woolworths' },
       ) as PendingVoiceAction
       setPending(result)
       setAgentTranscript(action === 'create'
         ? 'I found $38.50 at Woolworths for today. Please confirm.'
-        : 'I prepared the category change. Please confirm.')
+        : 'I prepared the Woolworths category change. Please confirm.')
       setStatus('confirmation_required')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Prototype action failed')
@@ -105,10 +141,16 @@ export function VoiceAssistant({ onMutation }: Props) {
 
   const cancel = async () => {
     if (!pending) return
-    await voiceToolAdapter.cancel(pending.pending_action_id)
-    setPending(undefined)
-    setStatus('ready')
-    setAgentTranscript('Cancelled. Nothing was saved.')
+    setError('')
+    try {
+      await voiceToolAdapter.cancel(pending.pending_action_id)
+      setPending(undefined)
+      setStatus('ready')
+      setAgentTranscript('Cancelled. Nothing was saved.')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to cancel pending action')
+      setStatus('error')
+    }
   }
 
   const preview = pending?.preview
@@ -118,9 +160,12 @@ export function VoiceAssistant({ onMutation }: Props) {
         <h2 id="voice-assistant-title" className="text-xl font-semibold">BizExpense Voice</h2>
         <p className="text-sm text-slate-500">AssemblyAI-powered voice expense assistant</p>
       </div>
-      <button className="btn-primary" onClick={start} disabled={status === 'connecting'}>
-        {status === 'error' ? 'Retry' : status === 'idle' ? 'Start voice assistant' : 'Reconnect microphone'}
-      </button>
+      <div className="flex gap-2">
+        <button className="btn-primary" onClick={start} disabled={status === 'connecting'}>
+          {status === 'error' ? 'Retry' : status === 'idle' || mockMode ? 'Start voice assistant' : 'Reconnect microphone'}
+        </button>
+        {!mockMode && status !== 'idle' && status !== 'error' && <button className="btn-secondary" onClick={stop}>Stop voice assistant</button>}
+      </div>
     </div>
     <p className="mt-4 text-sm"><strong>Status:</strong> {statusLabels[status]}</p>
     <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
@@ -129,6 +174,8 @@ export function VoiceAssistant({ onMutation }: Props) {
       <div className="mt-3 flex flex-wrap gap-2">
         <button className="btn-secondary" onClick={() => runPrototype('create')}>Demo create</button>
         <button className="btn-secondary" onClick={() => runPrototype('summary')}>Demo query</button>
+        <button className="btn-secondary" onClick={() => runPrototype('search')}>Demo search</button>
+        <button className="btn-secondary" onClick={() => runPrototype('categories')}>Demo categories</button>
         <button className="btn-secondary" onClick={() => runPrototype('update')}>Demo category update</button>
       </div>
     </div>
@@ -137,7 +184,7 @@ export function VoiceAssistant({ onMutation }: Props) {
     {agentTranscript && <p className="mt-3 rounded-lg bg-teal-50 p-3 text-teal-950"><strong>Agent:</strong> “{agentTranscript}”</p>}
     {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-red-800">{error}</p>}
     {pending && preview && <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4">
-      <h3 className="font-semibold">{pending.action === 'create_expense' ? 'New expense' : 'Update latest expense'}</h3>
+      <h3 className="font-semibold">{pending.action === 'create_expense' ? 'New expense' : 'Classify expense'}</h3>
       <dl className="mt-3 grid gap-2 sm:grid-cols-2">
         {Object.entries(preview).filter(([key]) => key !== 'expense_id').map(([key, value]) => <div key={key}>
           <dt className="text-xs uppercase text-slate-500">{key.replaceAll('_', ' ')}</dt>

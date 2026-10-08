@@ -12,3 +12,9 @@ class PrepareExpenseRequest(BaseModel):
 
 class PrepareExpenseUpdateRequest(BaseModel):
     category_name: str = Field(min_length=1, max_length=120)
+    search: str | None = Field(default=None, min_length=1, max_length=180)
+
+
+class SearchExpensesRequest(BaseModel):
+    search: str | None = Field(default=None, min_length=1, max_length=180)
+    category_name: str | None = Field(default=None, min_length=1, max_length=120)

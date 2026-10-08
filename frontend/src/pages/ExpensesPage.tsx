@@ -26,12 +26,15 @@ export function ExpensesPage() {
   const updateFilter = (name: keyof ExpenseFilters, value: string) => {
     setFilters((current) => ({ ...current, [name]: value }))
   }
+  const exportCsv = async () => {
+    const blob = await expenseService.exportCsv(filters); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'bizexpense-expenses.csv'; link.click(); URL.revokeObjectURL(url)
+  }
 
   return <>
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
       <div><h1 className="text-3xl font-bold">Expenses</h1><p className="text-slate-600">Review and manage recorded expenses.</p></div>
       <div className="flex gap-2">
-        <a className="btn-secondary" href={expenseService.exportUrl(filters)} download>Export CSV</a>
+        <button className="btn-secondary" type="button" onClick={exportCsv}>Export CSV</button>
         <Link className="btn" to="/expenses/new">Add expense</Link>
       </div>
     </div>

@@ -13,16 +13,24 @@ from app.schemas.expense import ExpenseCreate, ExpenseRead
 
 
 class ExpenseService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, user: User):
         self.db = db
-        self.repo = ExpenseRepository(db)
+        self.user = user
+        self.repo = ExpenseRepository(db, user.id)
 
-    @staticmethod
-    def serialize(expense: Expense) -> ExpenseRead:
+    def serialize(self, expense: Expense) -> ExpenseRead:
+        duplicate = self.repo.find_duplicate(
+            expense.supplier_id,
+            expense.invoice_number,
+            expense.total_amount,
+            exclude_id=expense.id,
+        )
         return ExpenseRead.model_validate({
             **{field: getattr(expense, field) for field in ExpenseRead.model_fields if hasattr(expense, field)},
             "supplier_name": expense.supplier.name,
             "category_name": expense.category.name,
+            "duplicate_warning": duplicate is not None,
+            "duplicate_expense_id": duplicate.id if duplicate else None,
         })
 
     def list(
@@ -47,28 +55,27 @@ class ExpenseService:
         return self.serialize(expense)
 
     def _references(self, payload: ExpenseCreate):
-        user = self.db.scalar(select(User).limit(1))
         category = self.db.get(ExpenseCategory, payload.category_id)
-        if not user or not category:
-            raise HTTPException(422, "Invalid user or category")
-        supplier = self.db.scalar(select(Supplier).where(Supplier.name == payload.supplier_name))
+        if not category:
+            raise HTTPException(422, "Invalid category")
+        supplier = self.db.scalar(select(Supplier).where(Supplier.user_id == self.user.id, Supplier.name == payload.supplier_name))
         if supplier is None:
-            supplier = Supplier(name=payload.supplier_name, abn=payload.supplier_abn)
+            supplier = Supplier(user_id=self.user.id, name=payload.supplier_name, abn=payload.supplier_abn)
             self.db.add(supplier)
             self.db.flush()
-        return user, supplier, category
+        return supplier, category
 
     def create(self, payload: ExpenseCreate) -> ExpenseRead:
-        user, supplier, category = self._references(payload)
+        supplier, category = self._references(payload)
         data = payload.model_dump(exclude={"supplier_name", "supplier_abn", "category_id"})
-        expense = Expense(**data, user_id=user.id, supplier_id=supplier.id, category_id=category.id)
+        expense = Expense(**data, user_id=self.user.id, supplier_id=supplier.id, category_id=category.id)
         return self.serialize(self.repo.save(expense))
 
     def update(self, expense_id: int, payload: ExpenseCreate) -> ExpenseRead:
         expense = self.repo.get(expense_id)
         if not expense:
             raise HTTPException(404, "Expense not found")
-        _, supplier, category = self._references(payload)
+        supplier, category = self._references(payload)
         for key, value in payload.model_dump(exclude={"supplier_name", "supplier_abn", "category_id"}).items():
             setattr(expense, key, value)
         expense.supplier_id = supplier.id
@@ -80,5 +87,3 @@ class ExpenseService:
         if not expense:
             raise HTTPException(404, "Expense not found")
         self.repo.delete(expense)
-
-    # TODO: add non-blocking duplicate warning based on supplier + invoice_number + total_amount.

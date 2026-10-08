@@ -1,4 +1,4 @@
-import { api } from './api'
+import { api, download } from './api'
 import type { Category, Dashboard, Expense, ExpenseFilters, ExpenseInput } from '../types/expense'
 
 function expenseQuery(filters: ExpenseFilters) {
@@ -12,7 +12,7 @@ function expenseQuery(filters: ExpenseFilters) {
 
 export const expenseService = {
   list: (filters: ExpenseFilters = {}) => api<Expense[]>(`/expenses${expenseQuery(filters)}`),
-  exportUrl: (filters: ExpenseFilters = {}) => `/api/expenses/export.csv${expenseQuery(filters)}`,
+  exportCsv: (filters: ExpenseFilters = {}) => download(`/expenses/export.csv${expenseQuery(filters)}`),
   get: (id: string) => api<Expense>(`/expenses/${id}`),
   create: (data: ExpenseInput) => api<Expense>('/expenses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
   update: (id: string, data: ExpenseInput) => api<Expense>(`/expenses/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),

@@ -1,0 +1,43 @@
+import { FormEvent, useState } from 'react'
+import { Navigate, useNavigate } from 'react-router-dom'
+
+import { api, storeSession, TokenPair } from '../services/api'
+
+export function AuthPage() {
+  const navigate = useNavigate()
+  const [register, setRegister] = useState(false)
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+
+  if (localStorage.getItem('bizexpense_token')) return <Navigate to="/" replace />
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setError('')
+    try {
+      const tokens = await api<TokenPair>(register ? '/auth/register' : '/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(register ? { name, email, password } : { email, password }),
+      })
+      storeSession(tokens)
+      navigate('/')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Authentication failed')
+    }
+  }
+
+  return <main className="mx-auto max-w-md p-6">
+    <h1 className="mb-6 text-3xl font-bold">{register ? 'Create account' : 'Sign in'}</h1>
+    <form className="card space-y-4" onSubmit={submit}>
+      {register && <label className="block">Name<input className="field mt-1" value={name} onChange={event => setName(event.target.value)} required /></label>}
+      <label className="block">Email<input className="field mt-1" type="email" value={email} onChange={event => setEmail(event.target.value)} required /></label>
+      <label className="block">Password<input className="field mt-1" type="password" minLength={12} value={password} onChange={event => setPassword(event.target.value)} required /></label>
+      {error && <p role="alert" aria-live="assertive" className="text-red-700">{error}</p>}
+      <button className="btn w-full">{register ? 'Register' : 'Sign in'}</button>
+    </form>
+    <button className="mt-4 text-teal-700" onClick={() => setRegister(!register)}>{register ? 'Already registered? Sign in' : 'Need an account? Register'}</button>
+  </main>
+}

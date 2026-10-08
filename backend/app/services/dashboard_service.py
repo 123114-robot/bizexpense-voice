@@ -6,21 +6,24 @@ from sqlalchemy.orm import Session
 
 from app.models.category import ExpenseCategory
 from app.models.expense import Expense
+from app.models.supplier import Supplier
 
 
 class DashboardService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, user_id: int):
         self.db = db
+        self.user_id = user_id
 
     def summary(self) -> dict:
         total, gst, count = self.db.execute(
             select(func.coalesce(func.sum(Expense.total_amount), 0), func.coalesce(func.sum(Expense.gst_amount), 0), func.count(Expense.id))
-            .where(Expense.ocr_confirmed.is_(True))
+            .where(Expense.ocr_confirmed.is_(True), Expense.user_id == self.user_id)
         ).one()
         today = date.today()
         month_total = self.db.scalar(
             select(func.coalesce(func.sum(Expense.total_amount), 0)).where(
                 Expense.ocr_confirmed.is_(True),
+                Expense.user_id == self.user_id,
                 extract("year", Expense.invoice_date) == today.year,
                 extract("month", Expense.invoice_date) == today.month,
             )
@@ -32,9 +35,25 @@ class DashboardService:
                 func.count(Expense.id).label("expense_count"),
             )
             .join(Expense, Expense.category_id == ExpenseCategory.id)
-            .where(Expense.ocr_confirmed.is_(True))
+            .where(Expense.ocr_confirmed.is_(True), Expense.user_id == self.user_id)
             .group_by(ExpenseCategory.id, ExpenseCategory.name)
             .order_by(func.sum(Expense.total_amount).desc())
+        ).all()
+        supplier_rows = self.db.execute(
+            select(
+                Supplier.name,
+                func.sum(Expense.total_amount).label("total"),
+                func.count(Expense.id).label("expense_count"),
+            )
+            .join(Expense, Expense.supplier_id == Supplier.id)
+            .where(
+                Expense.ocr_confirmed.is_(True),
+                Expense.user_id == self.user_id,
+                Supplier.user_id == self.user_id,
+            )
+            .group_by(Supplier.id, Supplier.name)
+            .order_by(func.sum(Expense.total_amount).desc())
+            .limit(5)
         ).all()
 
         first_month_index = today.year * 12 + today.month - 1 - 5
@@ -49,6 +68,7 @@ class DashboardService:
             )
             .where(
                 Expense.ocr_confirmed.is_(True),
+                Expense.user_id == self.user_id,
                 Expense.invoice_date >= first_month,
             )
             .group_by(year_expression, month_expression)
@@ -70,6 +90,17 @@ class DashboardService:
             "expenses_this_month": f"{Decimal(month_total or 0):.2f}",
             "gst_paid": f"{Decimal(gst):.2f}",
             "expense_count": count,
+            "average_expense": (
+                f"{Decimal(total) / count:.2f}" if count else "0.00"
+            ),
+            "top_suppliers": [
+                {
+                    "supplier": row.name,
+                    "total": f"{Decimal(row.total):.2f}",
+                    "expense_count": row.expense_count,
+                }
+                for row in supplier_rows
+            ],
             "category_breakdown": [
                 {
                     "category": row.name,

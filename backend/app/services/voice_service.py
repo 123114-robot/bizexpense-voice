@@ -9,14 +9,20 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.category import ExpenseCategory
+from app.models.user import User
 from app.schemas.expense import ExpenseCreate
-from app.schemas.voice import PrepareExpenseRequest, PrepareExpenseUpdateRequest
+from app.schemas.voice import (
+    PrepareExpenseRequest,
+    PrepareExpenseUpdateRequest,
+    SearchExpensesRequest,
+)
 from app.services.dashboard_service import DashboardService
 from app.services.expense_service import ExpenseService
 
 
 @dataclass
 class PendingAction:
+    user_id: int
     action: str
     payload: ExpenseCreate
     expense_id: int | None
@@ -31,10 +37,17 @@ class PendingActionStore:
         self._actions: dict[str, PendingAction] = {}
         self._lock = Lock()
 
-    def create(self, action: str, payload: ExpenseCreate, expense_id: int | None = None) -> str:
+    def create(
+        self,
+        action: str,
+        payload: ExpenseCreate,
+        user_id: int,
+        expense_id: int | None = None,
+    ) -> str:
         action_id = str(uuid4())
         with self._lock:
             self._actions[action_id] = PendingAction(
+                user_id=user_id,
                 action=action,
                 payload=payload,
                 expense_id=expense_id,
@@ -42,10 +55,12 @@ class PendingActionStore:
             )
         return action_id
 
-    def claim(self, action_id: str) -> PendingAction:
+    def claim(self, action_id: str, user_id: int) -> PendingAction:
         with self._lock:
             pending = self._actions.get(action_id)
             if pending is None:
+                raise HTTPException(404, "Pending action not found")
+            if pending.user_id != user_id:
                 raise HTTPException(404, "Pending action not found")
             if pending.expires_at <= datetime.now(UTC):
                 del self._actions[action_id]
@@ -69,10 +84,12 @@ class PendingActionStore:
             if pending is not None and not pending.executed:
                 pending.executing = False
 
-    def cancel(self, action_id: str) -> None:
+    def cancel(self, action_id: str, user_id: int) -> None:
         with self._lock:
-            if self._actions.pop(action_id, None) is None:
+            pending = self._actions.get(action_id)
+            if pending is None or pending.user_id != user_id:
                 raise HTTPException(404, "Pending action not found")
+            del self._actions[action_id]
 
     def clear(self) -> None:
         with self._lock:
@@ -80,9 +97,12 @@ class PendingActionStore:
 
 
 class VoiceService:
-    def __init__(self, db: Session, pending_actions: PendingActionStore):
+    def __init__(
+        self, db: Session, pending_actions: PendingActionStore, user: User
+    ):
         self.db = db
         self.pending_actions = pending_actions
+        self.user = user
 
     def _category(self, name: str | None) -> ExpenseCategory:
         category_name = (name or "Other").strip()
@@ -110,7 +130,39 @@ class VoiceService:
             ) from exc
 
     def summary(self) -> dict:
-        return DashboardService(self.db).summary()
+        return DashboardService(self.db, self.user.id).summary()
+
+    def categories(self) -> dict:
+        names = self.db.scalars(
+            select(ExpenseCategory.name).order_by(ExpenseCategory.id)
+        ).all()
+        return {"categories": list(names)}
+
+    def search_expenses(self, request: SearchExpensesRequest) -> dict:
+        category_id = (
+            self._category(request.category_name).id
+            if request.category_name is not None
+            else None
+        )
+        expenses = ExpenseService(self.db, self.user).list(
+            search=request.search,
+            category_id=category_id,
+            ocr_confirmed=True,
+        )
+        return {
+            "count": len(expenses),
+            "expenses": [
+                {
+                    "id": expense.id,
+                    "supplier_name": expense.supplier_name,
+                    "category_name": expense.category_name,
+                    "invoice_date": expense.invoice_date.isoformat(),
+                    "total_amount": f"{expense.total_amount:.2f}",
+                    "currency": expense.currency,
+                }
+                for expense in expenses[:5]
+            ],
+        }
 
     def prepare_expense(self, request: PrepareExpenseRequest) -> dict:
         category = self._category(request.category_name)
@@ -126,7 +178,9 @@ class VoiceService:
             description="Voice-created expense",
             ocr_confirmed=True,
         )
-        action_id = self.pending_actions.create("create_expense", payload)
+        action_id = self.pending_actions.create(
+            "create_expense", payload, self.user.id
+        )
         return {
             "status": "confirmation_required",
             "pending_action_id": action_id,
@@ -142,9 +196,16 @@ class VoiceService:
 
     def prepare_update(self, request: PrepareExpenseUpdateRequest) -> dict:
         category = self._category(request.category_name)
-        expenses = ExpenseService(self.db).list(ocr_confirmed=True)
+        expenses = ExpenseService(self.db, self.user).list(
+            search=request.search, ocr_confirmed=True
+        )
         if not expenses:
-            raise HTTPException(404, "No confirmed expense is available to update")
+            detail = (
+                f"No confirmed expense matches: {request.search}"
+                if request.search
+                else "No confirmed expense is available to update"
+            )
+            raise HTTPException(404, detail)
         latest = expenses[0]
         payload = ExpenseCreate(
             supplier_name=latest.supplier_name,
@@ -162,7 +223,7 @@ class VoiceService:
             ocr_confirmed=latest.ocr_confirmed,
         )
         action_id = self.pending_actions.create(
-            "update_expense", payload, expense_id=latest.id
+            "update_expense", payload, self.user.id, expense_id=latest.id
         )
         return {
             "status": "confirmation_required",
@@ -178,8 +239,8 @@ class VoiceService:
         }
 
     def confirm(self, action_id: str) -> dict:
-        pending = self.pending_actions.claim(action_id)
-        service = ExpenseService(self.db)
+        pending = self.pending_actions.claim(action_id, self.user.id)
+        service = ExpenseService(self.db, self.user)
         try:
             if pending.action == "create_expense":
                 expense = service.create(pending.payload)
